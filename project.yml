@@ -13,7 +13,8 @@ targets:
   TeleStream:
     type: application
     platform: iOS
-    sources: [TeleStream/Sources]
+    sources:
+      - TeleStream/Sources
     info:
       path: TeleStream/Info.plist
       properties:

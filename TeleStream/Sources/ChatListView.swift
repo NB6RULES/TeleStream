@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import TDLibKit
 
 struct ChatListView: View {
@@ -49,6 +50,9 @@ struct ChatListView: View {
                     } else {
                         ScrollView {
                             LazyVStack(spacing: 0) {
+                                ContinueWatchingRow()
+                                    .padding(.bottom, 8)
+
                                 ForEach(filteredChats, id: \.id) { chat in
                                     NavigationLink(destination: ChatDetailView(chatId: chat.id, title: chat.title)) {
                                         ChatRow(chat: chat)
@@ -59,9 +63,18 @@ struct ChatListView: View {
                     }
                 }
             }
-            .navigationTitle("TeleStream")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "paperplane.fill")
+                            .font(.system(size: 16))
+                            .foregroundColor(Color(hex: "ADC6FF"))
+                        Text("TeleStream")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundColor(Color(hex: "E3E2E7"))
+                    }
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     HStack(spacing: 4) {
                         Button(action: { Task { await refreshChats() } }) {
@@ -87,7 +100,8 @@ struct ChatListView: View {
 
     private var filteredChats: [Chat] {
         if searchText.isEmpty { return chats }
-        return chats.filter { $0.title.localizedCaseInsensitiveContains(searchText) }
+        return chats.filter { FuzzySearch.matches(query: searchText, target: $0.title) }
+            .sorted { FuzzySearch.score(query: searchText, target: $0.title) > FuzzySearch.score(query: searchText, target: $1.title) }
     }
 
     private func refreshChats() async {
@@ -103,19 +117,29 @@ struct ChatListView: View {
 
 struct ChatRow: View {
     let chat: Chat
+    @EnvironmentObject var client: TelegramClient
+    @State private var avatarPath: String?
 
     var body: some View {
         HStack(spacing: 12) {
             // Avatar
             ZStack(alignment: .bottomTrailing) {
-                Circle()
-                    .fill(Color(hex: "292A2E"))
-                    .frame(width: 56, height: 56)
-                    .overlay(
-                        Image(systemName: chatIcon)
-                            .font(.system(size: 22))
-                            .foregroundColor(Color(hex: "ADC6FF"))
-                    )
+                if let path = avatarPath, let uiImage = UIImage(contentsOfFile: path) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 56, height: 56)
+                        .clipShape(Circle())
+                } else {
+                    Circle()
+                        .fill(Color(hex: "292A2E"))
+                        .frame(width: 56, height: 56)
+                        .overlay(
+                            Image(systemName: chatIcon)
+                                .font(.system(size: 22))
+                                .foregroundColor(Color(hex: "ADC6FF"))
+                        )
+                }
 
                 // Type badge
                 Image(systemName: typeBadgeIcon)
@@ -154,6 +178,16 @@ struct ChatRow: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .background(Color.black)
+        .task {
+            if let photo = chat.photo {
+                let file = photo.small
+                if file.local.isDownloadingCompleted {
+                    avatarPath = file.local.path
+                } else {
+                    avatarPath = await client.downloadPhoto(fileId: file.id)
+                }
+            }
+        }
     }
 
     private var chatIcon: String {

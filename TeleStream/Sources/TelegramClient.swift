@@ -11,6 +11,8 @@ final class TelegramClient: ObservableObject {
     @Published var authState: AuthorizationState?
     @Published var qrCodeUrl: String?
     @Published var authError: String?
+    @Published var currentUserName: String = ""
+    @Published var currentUserPhone: String = ""
 
     let fileUpdateBroadcaster = FileUpdateBroadcaster()
 
@@ -85,6 +87,7 @@ final class TelegramClient: ObservableObject {
             case .authorizationStateReady:
                 self.qrCodeUrl = nil
                 self.authError = nil
+                Task { await self.fetchCurrentUser() }
             default:
                 break
             }
@@ -162,6 +165,52 @@ final class TelegramClient: ObservableObject {
             topicId: nil
         )
         return response.messages
+    }
+
+    // MARK: - User Info
+
+    func fetchCurrentUser() async {
+        do {
+            let me = try await client.getMe()
+            currentUserName = [me.firstName, me.lastName].filter { !$0.isEmpty }.joined(separator: " ")
+            currentUserPhone = me.phoneNumber.isEmpty ? "" : "+\(me.phoneNumber)"
+        } catch {
+            print("Failed to fetch user info: \(error)")
+        }
+    }
+
+    // MARK: - Avatar/Photo
+
+    func downloadPhoto(fileId: Int) async -> String? {
+        do {
+            let file = try await client.downloadFile(
+                fileId: fileId,
+                limit: 0,
+                offset: 0,
+                priority: 1,
+                synchronous: true
+            )
+            if file.local.isDownloadingCompleted {
+                return file.local.path
+            }
+        } catch {
+            // Silently fail for avatar downloads
+        }
+        return nil
+    }
+
+    func getChatPhoto(chatId: Int64) async -> String? {
+        do {
+            let chat = try await client.getChat(chatId: chatId)
+            guard let photo = chat.photo else { return nil }
+            let smallFile = photo.small
+            if smallFile.local.isDownloadingCompleted {
+                return smallFile.local.path
+            }
+            return await downloadPhoto(fileId: smallFile.id)
+        } catch {
+            return nil
+        }
     }
 
     // MARK: - Cache Management

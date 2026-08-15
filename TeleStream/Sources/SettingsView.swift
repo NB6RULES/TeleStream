@@ -2,11 +2,13 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject var client: TelegramClient
+    @ObservedObject var settings = AppSettings.shared
     @Environment(\.dismiss) var dismiss
     @State private var cacheSize: String = "..."
     @State private var isClearing = false
     @State private var showLogoutConfirm = false
     @State private var showClearConfirm = false
+    @State private var showClearPositionsConfirm = false
 
     var body: some View {
         NavigationView {
@@ -23,16 +25,14 @@ struct SettingsView: View {
                                         .font(.system(size: 44))
                                         .foregroundColor(Color(hex: "ADC6FF"))
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text("User")
+                                        Text(client.currentUserName.isEmpty ? "User" : client.currentUserName)
                                             .font(.system(size: 17, weight: .semibold))
                                             .foregroundColor(Color(hex: "E3E2E7"))
-                                        Text("Telegram Account")
+                                        Text(client.currentUserPhone.isEmpty ? "Telegram Account" : client.currentUserPhone)
                                             .font(.system(size: 15))
                                             .foregroundColor(Color(hex: "C1C6D7"))
                                     }
                                     Spacer()
-                                    Image(systemName: "chevron.right")
-                                        .foregroundColor(Color(hex: "8B90A0"))
                                 }
                                 .padding(16)
 
@@ -50,15 +50,36 @@ struct SettingsView: View {
 
                         // Playback section
                         settingsSection("PLAYBACK") {
-                            HStack {
-                                Text("Download whole video first")
-                                    .font(.system(size: 17))
-                                    .foregroundColor(Color(hex: "E3E2E7"))
-                                Spacer()
-                                Toggle("", isOn: .constant(false))
-                                    .tint(Color(hex: "ADC6FF"))
+                            VStack(spacing: 0) {
+                                settingsToggle("Download whole video first", isOn: $settings.downloadWholeFirst)
+
+                                Divider().background(Color(hex: "343539")).padding(.leading, 16)
+
+                                settingsToggle("Auto-play next episode", isOn: $settings.autoNextEpisode)
                             }
-                            .padding(16)
+                        }
+
+                        // Filters section
+                        settingsSection("FILTERS") {
+                            VStack(spacing: 0) {
+                                HStack {
+                                    Text("Hide clips below")
+                                        .font(.system(size: 17))
+                                        .foregroundColor(Color(hex: "E3E2E7"))
+                                    Spacer()
+                                    Picker("", selection: $settings.hideClipsBelowMB) {
+                                        Text("Off").tag(0)
+                                        Text("5 MB").tag(5)
+                                        Text("10 MB").tag(10)
+                                        Text("25 MB").tag(25)
+                                        Text("50 MB").tag(50)
+                                        Text("100 MB").tag(100)
+                                    }
+                                    .pickerStyle(.menu)
+                                    .tint(Color(hex: "ADC6FF"))
+                                }
+                                .padding(16)
+                            }
                         }
 
                         // Storage section
@@ -82,9 +103,10 @@ struct SettingsView: View {
                                         .font(.system(size: 17))
                                         .foregroundColor(Color(hex: "E3E2E7"))
                                     Spacer()
-                                    Text("3")
+                                    Stepper("\(settings.maxCachedVideos)", value: $settings.maxCachedVideos, in: 1...20)
                                         .font(.system(size: 17))
                                         .foregroundColor(Color(hex: "C1C6D7"))
+                                        .tint(Color(hex: "ADC6FF"))
                                 }
                                 .padding(16)
 
@@ -104,6 +126,16 @@ struct SettingsView: View {
                                     .padding(16)
                                 }
                                 .disabled(isClearing)
+
+                                Divider().background(Color(hex: "343539")).padding(.leading, 16)
+
+                                Button(action: { showClearPositionsConfirm = true }) {
+                                    Text("Clear Watch History")
+                                        .font(.system(size: 17))
+                                        .foregroundColor(Color(hex: "FFB4AB"))
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .padding(16)
+                                }
                             }
                         }
 
@@ -152,12 +184,32 @@ struct SettingsView: View {
             } message: {
                 Text("This will delete all cached videos.")
             }
+            .alert("Clear History", isPresented: $showClearPositionsConfirm) {
+                Button("Cancel", role: .cancel) {}
+                Button("Clear", role: .destructive) {
+                    AppSettings.shared.clearAllPositions()
+                }
+            } message: {
+                Text("This will remove all saved playback positions.")
+            }
             .task {
                 let size = await client.getCacheSize()
                 cacheSize = formatBytes(size)
             }
         }
         .preferredColorScheme(.dark)
+    }
+
+    private func settingsToggle(_ title: String, isOn: Binding<Bool>) -> some View {
+        HStack {
+            Text(title)
+                .font(.system(size: 17))
+                .foregroundColor(Color(hex: "E3E2E7"))
+            Spacer()
+            Toggle("", isOn: isOn)
+                .tint(Color(hex: "ADC6FF"))
+        }
+        .padding(16)
     }
 
     private func settingsSection(_ title: String, @ViewBuilder content: () -> some View) -> some View {

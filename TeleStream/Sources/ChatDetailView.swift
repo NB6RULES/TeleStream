@@ -8,6 +8,7 @@ struct ChatDetailView: View {
 
     @State private var videos: [Message] = []
     @State private var isLoading = true
+    @State private var searchText = ""
 
     var body: some View {
         ZStack {
@@ -26,22 +27,50 @@ struct ChatDetailView: View {
                         .foregroundColor(Color(hex: "8B90A0"))
                 }
             } else {
-                ScrollView {
-                    LazyVStack(spacing: 12) {
-                        ForEach(videos, id: \.id) { message in
-                            if case let .messageVideo(videoContent) = message.content {
-                                let video = videoContent.video
-                                NavigationLink(destination: PlayerView(
-                                    fileId: video.video.id,
-                                    fileSize: Int64(video.video.size > 0 ? video.video.size : video.video.expectedSize),
-                                    fileName: video.fileName.isEmpty ? "Video" : video.fileName
-                                )) {
-                                    VideoCard(video: video, caption: videoContent.caption.text)
-                                }
+                VStack(spacing: 0) {
+                    // Search bar
+                    HStack(spacing: 8) {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundColor(Color(hex: "8B90A0"))
+                            .font(.system(size: 16))
+                        TextField("", text: $searchText, prompt: Text("Search videos...").foregroundColor(Color(hex: "8B90A0")))
+                            .font(.system(size: 17))
+                            .foregroundColor(Color(hex: "E3E2E7"))
+                        if !searchText.isEmpty {
+                            Button(action: { searchText = "" }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(Color(hex: "8B90A0"))
                             }
                         }
                     }
-                    .padding(16)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(Color(hex: "1E1F23"))
+                    .cornerRadius(10)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+
+                    ScrollView {
+                        LazyVStack(spacing: 12) {
+                            ForEach(filteredVideos, id: \.id) { message in
+                                if case let .messageVideo(videoContent) = message.content {
+                                    let video = videoContent.video
+                                    NavigationLink(destination: PlayerView(
+                                        fileId: video.video.id,
+                                        fileSize: Int64(video.video.size > 0 ? video.video.size : video.video.expectedSize),
+                                        fileName: video.fileName.isEmpty ? "Video" : video.fileName,
+                                        chatId: chatId,
+                                        chatTitle: title,
+                                        duration: video.duration,
+                                        allVideos: allVideosList
+                                    )) {
+                                        VideoCard(video: video, caption: videoContent.caption.text, timestamp: message.date)
+                                    }
+                                }
+                            }
+                        }
+                        .padding(16)
+                    }
                 }
             }
         }
@@ -60,6 +89,53 @@ struct ChatDetailView: View {
         }
     }
 
+    private var allVideosList: [(fileId: Int, fileName: String, fileSize: Int64)] {
+        videos.compactMap { message in
+            guard case let .messageVideo(vc) = message.content else { return nil }
+            let v = vc.video
+            return (fileId: v.video.id, fileName: v.fileName, fileSize: Int64(v.video.size > 0 ? v.video.size : v.video.expectedSize))
+        }
+    }
+
+    private var filteredVideos: [Message] {
+        let hideBelow = AppSettings.shared.hideClipsBelowMB
+        var result = videos
+
+        // Filter by size
+        if hideBelow > 0 {
+            let minBytes = Int64(hideBelow) * 1024 * 1024
+            result = result.filter { msg in
+                guard case let .messageVideo(vc) = msg.content else { return false }
+                let size = vc.video.video.size > 0 ? vc.video.video.size : vc.video.video.expectedSize
+                return Int64(size) >= minBytes
+            }
+        }
+
+        // Fuzzy search
+        if !searchText.isEmpty {
+            result = result.filter { msg in
+                guard case let .messageVideo(vc) = msg.content else { return false }
+                let name = vc.video.fileName
+                let caption = vc.caption.text
+                let target = "\(name) \(caption)"
+                return FuzzySearch.matches(query: searchText, target: target)
+            }
+            // Sort by relevance
+            result.sort { a, b in
+                let aName = videoSearchTarget(a)
+                let bName = videoSearchTarget(b)
+                return FuzzySearch.score(query: searchText, target: aName) > FuzzySearch.score(query: searchText, target: bName)
+            }
+        }
+
+        return result
+    }
+
+    private func videoSearchTarget(_ msg: Message) -> String {
+        guard case let .messageVideo(vc) = msg.content else { return "" }
+        return "\(vc.video.fileName) \(vc.caption.text)"
+    }
+
     private func refreshVideos() async {
         isLoading = true
         do {
@@ -74,6 +150,11 @@ struct ChatDetailView: View {
 struct VideoCard: View {
     let video: Video
     let caption: String
+    let timestamp: Int
+
+    private var episodeInfo: EpisodeInfo? {
+        EpisodeDetector.detect(from: video.fileName)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -95,10 +176,34 @@ struct VideoCard: View {
                         } else if video.width >= 1280 {
                             resolutionBadge("720p")
                         }
+                        if let ep = episodeInfo {
+                            Text(ep.displayName)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color(hex: "ADC6FF").opacity(0.3))
+                                .clipShape(Capsule())
+                        }
                         Spacer()
                     }
                     Spacer()
                     HStack {
+                        // Progress bar if partially watched
+                        if let progress = watchProgress, progress > 0.01 && progress < 0.99 {
+                            GeometryReader { geo in
+                                ZStack(alignment: .leading) {
+                                    Capsule()
+                                        .fill(Color.white.opacity(0.3))
+                                        .frame(height: 3)
+                                    Capsule()
+                                        .fill(Color(hex: "ADC6FF"))
+                                        .frame(width: geo.size.width * progress, height: 3)
+                                }
+                            }
+                            .frame(height: 3)
+                            .padding(.trailing, 8)
+                        }
                         Spacer()
                         Text(formatDuration(video.duration))
                             .font(.system(size: 12, weight: .medium))
@@ -131,6 +236,10 @@ struct VideoCard: View {
                     }
                 }
 
+                Text(formatTimestamp(timestamp))
+                    .font(.system(size: 12))
+                    .foregroundColor(Color(hex: "8B90A0"))
+
                 if !caption.isEmpty {
                     Text(caption)
                         .font(.system(size: 13))
@@ -142,6 +251,12 @@ struct VideoCard: View {
         }
         .background(Color(hex: "1A1B1F"))
         .cornerRadius(12)
+    }
+
+    private var watchProgress: Double? {
+        let pos = AppSettings.shared.playbackPositions[video.video.id]
+        guard let p = pos, video.duration > 0 else { return nil }
+        return p / Double(video.duration)
     }
 
     private func resolutionBadge(_ text: String) -> some View {
@@ -166,5 +281,12 @@ struct VideoCard: View {
         let mb = Double(bytes) / (1024 * 1024)
         if mb >= 1024 { return String(format: "%.1f GB", mb / 1024) }
         return String(format: "%.1f MB", mb)
+    }
+
+    private func formatTimestamp(_ ts: Int) -> String {
+        let date = Date(timeIntervalSince1970: TimeInterval(ts))
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d, yyyy 'at' h:mm a"
+        return formatter.string(from: date)
     }
 }

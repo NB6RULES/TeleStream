@@ -9,6 +9,7 @@ final class TDResourceLoaderDelegate: NSObject, AVAssetResourceLoaderDelegate {
     private let mimeType: String
     private let broadcaster: FileUpdateBroadcaster
 
+    private let downloadWholeFirst: Bool
     private var pendingRequests = [AVAssetResourceLoadingRequest: Task<Void, Never>]()
     private let requestLock = NSLock()
 
@@ -19,6 +20,7 @@ final class TDResourceLoaderDelegate: NSObject, AVAssetResourceLoaderDelegate {
         self.fileSize = fileSize
         self.mimeType = mimeType
         self.broadcaster = client.fileUpdateBroadcaster
+        self.downloadWholeFirst = AppSettings.shared.downloadWholeFirst
         super.init()
     }
 
@@ -127,10 +129,13 @@ final class TDResourceLoaderDelegate: NSObject, AVAssetResourceLoaderDelegate {
             if Task.isCancelled { return 0 }
 
             do {
+                let dlOffset: Int64 = downloadWholeFirst ? 0 : offset
+                let dlLimit: Int64 = downloadWholeFirst ? 0 : Int64(limit)
+
                 let file = try await tdClient.downloadFile(
                     fileId: fileId,
-                    limit: Int64(limit),
-                    offset: offset,
+                    limit: dlLimit,
+                    offset: dlOffset,
                     priority: 32,
                     synchronous: false
                 )
