@@ -110,6 +110,7 @@ final class TelegramClient: ObservableObject {
                 allowMissedCall: false,
                 allowSmsRetrieverApi: false,
                 authenticationTokens: [],
+                firebaseAuthenticationSettings: nil,
                 hasUnknownPhoneNumber: false,
                 isCurrentPhoneNumber: false
             )
