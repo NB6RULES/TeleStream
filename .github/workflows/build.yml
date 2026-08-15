@@ -14,12 +14,31 @@ jobs:
     timeout-minutes: 30
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
     - name: Select Xcode
       run: sudo xcode-select -s /Applications/Xcode_15.2.app
 
     - name: Install Xcodegen
       run: brew install xcodegen
+
+    - name: Determine Version
+      id: version
+      run: |
+        # Get the latest version tag (v1.XX format)
+        LAST_TAG=$(git tag --list 'v1.*' --sort=-version:refname | head -n 1)
+        if [ -z "$LAST_TAG" ]; then
+          NEW_VERSION="1.01"
+        else
+          # Extract minor number and increment
+          MINOR=$(echo "$LAST_TAG" | sed 's/v1\.//')
+          # Remove leading zeros for arithmetic
+          MINOR_NUM=$((10#$MINOR + 1))
+          NEW_VERSION="1.$(printf '%02d' $MINOR_NUM)"
+        fi
+        echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+        echo "Building version $NEW_VERSION"
 
     - name: Generate Xcode Project
       run: xcodegen generate
@@ -36,7 +55,9 @@ jobs:
           -derivedDataPath build \
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO \
-          CODE_SIGNING_ALLOWED=NO
+          CODE_SIGNING_ALLOWED=NO \
+          MARKETING_VERSION=${{ steps.version.outputs.version }} \
+          CURRENT_PROJECT_VERSION=${{ github.run_number }}
 
     - name: Package IPA
       run: |
@@ -50,28 +71,57 @@ jobs:
         name: TeleStream-iOS
         path: TeleStream.ipa
 
-    - name: Publish to Release
+    - name: Publish Versioned Release
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
-        # Delete existing 'latest' release if it exists
+        VERSION="${{ steps.version.outputs.version }}"
+        VERSION_TAG="v${VERSION}"
+
+        # Create the versioned release
+        git tag "$VERSION_TAG"
+        git push origin "$VERSION_TAG"
+
+        NOTES="## TeleStream v${VERSION}
+
+        Built from commit $(git rev-parse --short HEAD) on $(date -u '+%Y-%m-%d %H:%M UTC')
+
+        ### Install on iPhone
+        1. Download **TeleStream.ipa** below
+        2. Use AltStore or Sideloadly to install
+        3. Open the app and log in with QR code or phone number"
+
+        gh release create "$VERSION_TAG" TeleStream.ipa \
+          --title "TeleStream v${VERSION}" \
+          --notes "$NOTES"
+
+    - name: Update Latest Release
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        VERSION="${{ steps.version.outputs.version }}"
+
+        # Delete existing 'latest' release/tag
         gh release delete latest --yes 2>/dev/null || true
         git tag -d latest 2>/dev/null || true
         git push origin :refs/tags/latest 2>/dev/null || true
 
-        # Create new 'latest' release with the IPA
+        # Create 'latest' pointing to this build
         git tag latest
         git push origin latest
 
-        NOTES="Auto-built from commit $(git rev-parse --short HEAD) on $(date -u '+%Y-%m-%d %H:%M UTC')
+        NOTES="## Latest Build (v${VERSION})
 
-        Download TeleStream.ipa and install with AltStore or Sideloadly.
+        This release always points to the most recent successful build.
+        Direct download: https://github.com/NB6RULES/TeleStream/releases/download/latest/TeleStream.ipa
 
-        Install on iPhone:
-        1. Download TeleStream.ipa below
+        Built from commit $(git rev-parse --short HEAD) on $(date -u '+%Y-%m-%d %H:%M UTC')
+
+        ### Install on iPhone
+        1. Download **TeleStream.ipa** below
         2. Use AltStore or Sideloadly to install
         3. Open the app and log in with QR code or phone number"
 
         gh release create latest TeleStream.ipa \
-          --title "Latest Build" \
+          --title "TeleStream Latest (v${VERSION})" \
           --notes "$NOTES"
