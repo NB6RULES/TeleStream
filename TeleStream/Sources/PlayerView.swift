@@ -8,31 +8,52 @@ struct PlayerView: View {
 
     @EnvironmentObject var client: TelegramClient
     @StateObject private var viewModel = PlayerViewModel()
+    @Environment(\.dismiss) var dismiss
 
     var body: some View {
         ZStack {
             Color.black.edgesIgnoringSafeArea(.all)
 
             if viewModel.isLoading {
+                // Buffering state matching design
                 VStack(spacing: 12) {
-                    ProgressView()
-                        .scaleEffect(1.5)
-                        .tint(.white)
-                    Text("Loading video...")
-                        .foregroundColor(.white)
-                }
-            } else if let error = viewModel.error {
-                VStack(spacing: 12) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.largeTitle)
-                        .foregroundColor(.yellow)
-                    Text(error)
-                        .foregroundColor(.white)
-                        .multilineTextAlignment(.center)
-                    Button("Retry") {
-                        viewModel.setup(fileId: fileId, fileSize: fileSize, client: client)
+                    ZStack {
+                        Circle()
+                            .stroke(Color.white.opacity(0.2), lineWidth: 2)
+                            .frame(width: 48, height: 48)
+                        Circle()
+                            .trim(from: 0, to: 0.3)
+                            .stroke(Color(hex: "ADC6FF"), lineWidth: 2)
+                            .frame(width: 48, height: 48)
+                            .rotationEffect(.degrees(viewModel.spinAngle))
+                            .animation(.linear(duration: 1).repeatForever(autoreverses: false), value: viewModel.spinAngle)
                     }
-                    .buttonStyle(.borderedProminent)
+                    Text("Buffering...")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundColor(.white.opacity(0.7))
+                        .tracking(0.5)
+                }
+                .onAppear { viewModel.spinAngle = 360 }
+            } else if let error = viewModel.error {
+                VStack(spacing: 16) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 36))
+                        .foregroundColor(Color(hex: "FFB4AB"))
+                    Text(error)
+                        .font(.system(size: 15))
+                        .foregroundColor(.white.opacity(0.7))
+                        .multilineTextAlignment(.center)
+                    Button(action: {
+                        viewModel.setup(fileId: fileId, fileSize: fileSize, client: client)
+                    }) {
+                        Text("Retry")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 32)
+                            .padding(.vertical, 12)
+                            .background(Color(hex: "007AFF"))
+                            .cornerRadius(25)
+                    }
                 }
                 .padding()
             } else {
@@ -42,6 +63,7 @@ struct PlayerView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .navigationTitle(fileName)
+        .preferredColorScheme(.dark)
         .onAppear {
             viewModel.setup(fileId: fileId, fileSize: fileSize, client: client)
         }
@@ -55,6 +77,7 @@ struct PlayerView: View {
 class PlayerViewModel: ObservableObject {
     @Published var isLoading = true
     @Published var error: String?
+    @Published var spinAngle: Double = 0
 
     let player = AVPlayer()
     private var loaderDelegate: TDResourceLoaderDelegate?
