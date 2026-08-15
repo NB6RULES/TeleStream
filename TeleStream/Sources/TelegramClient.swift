@@ -153,8 +153,11 @@ final class TelegramClient: ObservableObject {
         return chats
     }
 
+    private static let videoExtensions: Set<String> = ["mp4", "mkv", "avi", "ts", "mov", "m4v", "wmv", "flv", "webm"]
+
     func getVideos(in chatId: Int64) async throws -> [Message] {
-        let response = try await client.searchChatMessages(
+        // Fetch actual video messages
+        let videoResponse = try await client.searchChatMessages(
             chatId: chatId,
             filter: .searchMessagesFilterVideo,
             fromMessageId: 0,
@@ -164,7 +167,30 @@ final class TelegramClient: ObservableObject {
             senderId: nil,
             topicId: nil
         )
-        return response.messages
+
+        // Fetch document messages (which may contain video files)
+        let docResponse = try await client.searchChatMessages(
+            chatId: chatId,
+            filter: .searchMessagesFilterDocument,
+            fromMessageId: 0,
+            limit: 100,
+            offset: 0,
+            query: "",
+            senderId: nil,
+            topicId: nil
+        )
+
+        // Filter documents that are actually video files
+        let videoDocuments = docResponse.messages.filter { msg in
+            guard case let .messageDocument(doc) = msg.content else { return false }
+            let ext = (doc.document.fileName as NSString).pathExtension.lowercased()
+            return Self.videoExtensions.contains(ext)
+        }
+
+        // Combine and sort by date (newest first)
+        var all = videoResponse.messages + videoDocuments
+        all.sort { $0.date > $1.date }
+        return all
     }
 
     // MARK: - User Info
