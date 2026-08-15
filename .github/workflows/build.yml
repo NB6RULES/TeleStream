@@ -1,0 +1,77 @@
+name: Build iOS
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 30
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Select Xcode
+      run: sudo xcode-select -s /Applications/Xcode_15.2.app
+
+    - name: Install Xcodegen
+      run: brew install xcodegen
+
+    - name: Generate Xcode Project
+      run: xcodegen generate
+
+    - name: Build App
+      run: |
+        xcodebuild -resolvePackageDependencies -project TeleStream.xcodeproj
+        xcodebuild clean build \
+          -project TeleStream.xcodeproj \
+          -scheme TeleStream \
+          -sdk iphoneos \
+          -destination "generic/platform=iOS" \
+          -configuration Release \
+          -derivedDataPath build \
+          CODE_SIGN_IDENTITY="" \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGNING_ALLOWED=NO
+
+    - name: Package IPA
+      run: |
+        mkdir -p Payload
+        cp -r build/Build/Products/Release-iphoneos/TeleStream.app Payload/
+        zip -r TeleStream.ipa Payload
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: TeleStream-iOS
+        path: TeleStream.ipa
+
+    - name: Publish to Release
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        # Delete existing 'latest' release if it exists
+        gh release delete latest --yes 2>/dev/null || true
+        git tag -d latest 2>/dev/null || true
+        git push origin :refs/tags/latest 2>/dev/null || true
+
+        # Create new 'latest' release with the IPA
+        git tag latest
+        git push origin latest
+
+        NOTES="Auto-built from commit $(git rev-parse --short HEAD) on $(date -u '+%Y-%m-%d %H:%M UTC')
+
+        Download TeleStream.ipa and install with AltStore or Sideloadly.
+
+        Install on iPhone:
+        1. Download TeleStream.ipa below
+        2. Use AltStore or Sideloadly to install
+        3. Open the app and log in with QR code or phone number"
+
+        gh release create latest TeleStream.ipa \
+          --title "Latest Build" \
+          --notes "$NOTES"

@@ -1,0 +1,9 @@
+build-output/
+logs.txt
+logs.zip
+*.xcodeproj/
+build/
+Payload/
+*.ipa
+.DS_Store
+
