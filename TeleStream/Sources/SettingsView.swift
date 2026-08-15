@@ -141,11 +141,10 @@ struct SettingsView: View {
 
                         // About
                         VStack(spacing: 8) {
-                            Image(systemName: "paperplane.fill")
-                                .font(.system(size: 28))
-                                .foregroundColor(Color(hex: "ADC6FF"))
+                            Image("TeleStreamLogo")
+                                .resizable()
+                                .scaledToFit()
                                 .frame(width: 56, height: 56)
-                                .background(Color(hex: "1E1F23"))
                                 .cornerRadius(12)
 
                             Text("TeleStream")

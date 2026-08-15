@@ -67,9 +67,11 @@ struct ChatListView: View {
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     HStack(spacing: 6) {
-                        Image(systemName: "paperplane.fill")
-                            .font(.system(size: 16))
-                            .foregroundColor(Color(hex: "ADC6FF"))
+                        Image("TeleStreamLogo")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 28, height: 28)
+                            .cornerRadius(6)
                         Text("TeleStream")
                             .font(.system(size: 18, weight: .bold))
                             .foregroundColor(Color(hex: "E3E2E7"))

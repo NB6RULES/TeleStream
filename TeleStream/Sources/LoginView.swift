@@ -16,11 +16,10 @@ struct LoginView: View {
                 VStack(spacing: 0) {
                     Spacer().frame(height: 60)
 
-                    Image(systemName: "paperplane.fill")
-                        .font(.system(size: 40))
-                        .foregroundColor(Color(hex: "ADC6FF"))
+                    Image("TeleStreamLogo")
+                        .resizable()
+                        .scaledToFit()
                         .frame(width: 80, height: 80)
-                        .background(Color(hex: "1C1C1E"))
                         .cornerRadius(18)
                         .padding(.bottom, 16)
 
