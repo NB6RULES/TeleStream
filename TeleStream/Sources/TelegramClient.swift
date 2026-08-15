@@ -105,9 +105,17 @@ final class TelegramClient: ObservableObject {
     func sendPhoneNumber(_ phone: String) async {
         authError = nil
         do {
+            let settings = PhoneNumberAuthenticationSettings(
+                allowFlashCall: false,
+                allowMissedCall: false,
+                allowSmsRetrieverApi: false,
+                authenticationTokens: [],
+                hasUnknownPhoneNumber: false,
+                isCurrentPhoneNumber: false
+            )
             let _ = try await client.setAuthenticationPhoneNumber(
                 phoneNumber: phone,
-                settings: nil
+                settings: settings
             )
         } catch {
             authError = "Failed to send code: \(error.localizedDescription)"
