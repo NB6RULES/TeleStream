@@ -290,7 +290,7 @@ struct VideoCard: View {
         .cornerRadius(12)
     }
 
-    private var watchProgress: Double? {
+    @MainActor private var watchProgress: Double? {
         let pos = AppSettings.shared.playbackPositions[video.video.id]
         guard let p = pos, video.duration > 0 else { return nil }
         return p / Double(video.duration)
@@ -422,7 +422,7 @@ struct DocumentVideoCard: View {
         .cornerRadius(12)
     }
 
-    private var watchProgress: Double? {
+    @MainActor private var watchProgress: Double? {
         let pos = AppSettings.shared.playbackPositions[fileId]
         guard let p = pos, duration > 0 else { return nil }
         return p / Double(duration)
