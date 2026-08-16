@@ -118,13 +118,13 @@ struct HistoryView: View {
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("This will remove all saved playback progress and watched videos.")
-            }
         }
+        .navigationViewStyle(StackNavigationViewStyle())
         .preferredColorScheme(.dark)
     }
 
     private var emptyStateView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 20) {
             ZStack {
                 Circle()
                     .fill(Color(hex: "1E1F23"))
@@ -134,7 +134,7 @@ struct HistoryView: View {
                     .foregroundColor(Color(hex: "ADC6FF"))
             }
 
-            VStack(spacing: 6) {
+            VStack(spacing: 8) {
                 Text("No Watch History")
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundColor(.white)
@@ -145,6 +145,22 @@ struct HistoryView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
             }
+
+            Button(action: {
+                NotificationCenter.default.post(name: NSNotification.Name("SwitchToChatsTab"), object: nil)
+            }) {
+                HStack(spacing: 8) {
+                    Image(systemName: "bubble.left.and.bubble.right.fill")
+                    Text("Browse Chats")
+                }
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(.white)
+                .padding(.horizontal, 22)
+                .padding(.vertical, 12)
+                .background(Color(hex: "007AFF"))
+                .cornerRadius(22)
+            }
+            .padding(.top, 8)
         }
         .padding()
     }

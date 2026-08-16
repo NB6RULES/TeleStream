@@ -83,6 +83,9 @@ struct MainTabView: View {
         }
         .accentColor(Color(hex: "007AFF"))
         .preferredColorScheme(.dark)
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("SwitchToChatsTab"))) { _ in
+            selectedTab = 0
+        }
     }
 }
 
