@@ -12,15 +12,49 @@ struct ContentView: View {
                     ChatListView()
                 case .authorizationStateWaitOtherDeviceConfirmation,
                      .authorizationStateWaitPhoneNumber,
-                     .authorizationStateWaitCode:
+                     .authorizationStateWaitCode,
+                     .authorizationStateWaitPassword,
+                     .authorizationStateWaitRegistration:
                     LoginView()
+                case .authorizationStateLoggingOut,
+                     .authorizationStateClosing,
+                     .authorizationStateClosed:
+                    ZStack {
+                        Color.black.edgesIgnoringSafeArea(.all)
+                        VStack(spacing: 12) {
+                            ProgressView()
+                                .tint(Color(hex: "ADC6FF"))
+                            Text("Logging out...")
+                                .font(.system(size: 15))
+                                .foregroundColor(Color(hex: "8B90A0"))
+                        }
+                    }
                 default:
-                    ProgressView("Connecting to Telegram...")
+                    ZStack {
+                        Color.black.edgesIgnoringSafeArea(.all)
+                        VStack(spacing: 12) {
+                            ProgressView()
+                                .tint(Color(hex: "ADC6FF"))
+                            Text("Connecting to Telegram...")
+                                .font(.system(size: 15))
+                                .foregroundColor(Color(hex: "8B90A0"))
+                        }
+                    }
                 }
             } else {
-                ProgressView("Starting up...")
+                ZStack {
+                    Color.black.edgesIgnoringSafeArea(.all)
+                    VStack(spacing: 12) {
+                        ProgressView()
+                            .tint(Color(hex: "ADC6FF"))
+                        Text("Starting up...")
+                            .font(.system(size: 15))
+                            .foregroundColor(Color(hex: "8B90A0"))
+                    }
+                }
             }
         }
+        .preferredColorScheme(.dark)
     }
 }
 

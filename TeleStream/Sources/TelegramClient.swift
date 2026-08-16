@@ -11,8 +11,10 @@ final class TelegramClient: ObservableObject {
     @Published var authState: AuthorizationState?
     @Published var qrCodeUrl: String?
     @Published var authError: String?
+    @Published var passwordHint: String?
     @Published var currentUserName: String = ""
     @Published var currentUserPhone: String = ""
+    @Published var isProcessingAuth: Bool = false
 
     let fileUpdateBroadcaster = FileUpdateBroadcaster()
 
@@ -84,13 +86,30 @@ final class TelegramClient: ObservableObject {
                 )
             case .authorizationStateWaitOtherDeviceConfirmation(let confirm):
                 self.qrCodeUrl = confirm.link
+            case .authorizationStateWaitPassword(let pass):
+                self.passwordHint = pass.passwordHint
             case .authorizationStateReady:
                 self.qrCodeUrl = nil
                 self.authError = nil
+                self.passwordHint = nil
                 Task { await self.fetchCurrentUser() }
+            case .authorizationStateClosed:
+                self.recreateClient()
             default:
                 break
             }
+        }
+    }
+
+    func recreateClient() {
+        qrCodeUrl = nil
+        authError = nil
+        passwordHint = nil
+        client = manager.createClient(updateHandler: { [weak self] data, _ in
+            self?.handleUpdate(data: data)
+        })
+        Task {
+            await start()
         }
     }
 
@@ -98,6 +117,8 @@ final class TelegramClient: ObservableObject {
 
     func startQRAuth() async {
         authError = nil
+        isProcessingAuth = true
+        defer { isProcessingAuth = false }
         do {
             let _ = try await client.requestQrCodeAuthentication(otherUserIds: [])
         } catch {
@@ -107,6 +128,27 @@ final class TelegramClient: ObservableObject {
 
     func sendPhoneNumber(_ phone: String) async {
         authError = nil
+        let cleaned = phone.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: " ", with: "")
+            .replacingOccurrences(of: "-", with: "")
+            .replacingOccurrences(of: "(", with: "")
+            .replacingOccurrences(of: ")", with: "")
+        let formatted = cleaned.hasPrefix("+") ? cleaned : "+\(cleaned)"
+
+        guard formatted.count >= 6 else {
+            authError = "Please enter a valid phone number with country code (e.g. +1234567890)."
+            return
+        }
+
+        isProcessingAuth = true
+        defer { isProcessingAuth = false }
+
+        // If client was previously in QR wait state, reset it so phone login is accepted by TDLib
+        if case .authorizationStateWaitOtherDeviceConfirmation = authState {
+            recreateClient()
+            try? await Task.sleep(nanoseconds: 600_000_000)
+        }
+
         do {
             let settings = PhoneNumberAuthenticationSettings(
                 allowFlashCall: false,
@@ -118,7 +160,7 @@ final class TelegramClient: ObservableObject {
                 isCurrentPhoneNumber: false
             )
             let _ = try await client.setAuthenticationPhoneNumber(
-                phoneNumber: phone,
+                phoneNumber: formatted,
                 settings: settings
             )
         } catch {
@@ -128,10 +170,56 @@ final class TelegramClient: ObservableObject {
 
     func sendAuthCode(_ code: String) async {
         authError = nil
+        let cleaned = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else { return }
+
+        isProcessingAuth = true
+        defer { isProcessingAuth = false }
+
         do {
-            let _ = try await client.checkAuthenticationCode(code: code)
+            let _ = try await client.checkAuthenticationCode(code: cleaned)
         } catch {
             authError = "Invalid code: \(error.localizedDescription)"
+        }
+    }
+
+    func sendPassword(_ password: String) async {
+        authError = nil
+        guard !password.isEmpty else { return }
+
+        isProcessingAuth = true
+        defer { isProcessingAuth = false }
+
+        do {
+            let _ = try await client.checkAuthenticationPassword(password: password)
+        } catch {
+            authError = "Incorrect password: \(error.localizedDescription)"
+        }
+    }
+
+    func registerUser(firstName: String, lastName: String) async {
+        authError = nil
+        guard !firstName.isEmpty else {
+            authError = "First name is required."
+            return
+        }
+
+        isProcessingAuth = true
+        defer { isProcessingAuth = false }
+
+        do {
+            let _ = try await client.registerUser(firstName: firstName, lastName: lastName)
+        } catch {
+            authError = "Registration failed: \(error.localizedDescription)"
+        }
+    }
+
+    func resendCode() async {
+        authError = nil
+        do {
+            let _ = try await client.resendAuthenticationCode()
+        } catch {
+            authError = "Failed to resend code: \(error.localizedDescription)"
         }
     }
 
