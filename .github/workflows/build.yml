@@ -146,5 +146,6 @@ jobs:
         git add sources.json
         if ! git diff --staged --quiet; then
           git commit -m "chore: update sources.json for v${VERSION} [skip ci]"
-          git push origin main
+          git pull --rebase origin main || true
+          git push origin main || true
         fi
