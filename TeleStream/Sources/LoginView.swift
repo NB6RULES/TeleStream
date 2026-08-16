@@ -173,7 +173,8 @@ struct LoginView: View {
 
             Button(action: {
                 Task {
-                    await client.refreshQRAuth()
+                    client.qrCodeUrl = nil
+                    await client.startQRAuth()
                 }
             }) {
                 HStack(spacing: 6) {
@@ -328,7 +329,7 @@ struct LoginView: View {
 
                 Button(action: {
                     verificationCode = ""
-                    client.recreateClient()
+                    client.authState = .authorizationStateWaitPhoneNumber
                 }) {
                     Text("Change Number")
                         .font(.system(size: 14, weight: .medium))
@@ -408,7 +409,7 @@ struct LoginView: View {
 
             Button(action: {
                 password = ""
-                client.recreateClient()
+                client.authState = .authorizationStateWaitPhoneNumber
             }) {
                 Text("Cancel & Start Over")
                     .font(.system(size: 14, weight: .medium))
