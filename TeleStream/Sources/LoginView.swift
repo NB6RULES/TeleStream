@@ -82,7 +82,7 @@ struct LoginView: View {
         }
         .preferredColorScheme(.dark)
         .onAppear {
-            if selectedTab == 0 && client.qrCodeUrl == nil {
+            if selectedTab == 0 && client.qrCodeUrl == nil && !client.isProcessingAuth {
                 Task { await client.startQRAuth() }
             }
         }

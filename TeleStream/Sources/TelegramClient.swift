@@ -16,6 +16,7 @@ final class TelegramClient: ObservableObject {
     @Published var currentUserPhone: String = ""
     @Published var isProcessingAuth: Bool = false
     @Published var pendingQRAuth: Bool = true
+    private var pendingPhoneNumber: String? = nil
 
     let fileUpdateBroadcaster = FileUpdateBroadcaster()
 
@@ -88,8 +89,12 @@ final class TelegramClient: ObservableObject {
             case .authorizationStateWaitOtherDeviceConfirmation(let confirm):
                 self.qrCodeUrl = confirm.link
             case .authorizationStateWaitPhoneNumber:
-                // Auto-trigger QR login if pending (e.g. on first launch or after tab switch)
-                if self.pendingQRAuth {
+                // Pending phone login takes priority over QR
+                if let phone = self.pendingPhoneNumber {
+                    self.pendingPhoneNumber = nil
+                    self.pendingQRAuth = false
+                    Task { await self.sendPhoneNumberNow(phone) }
+                } else if self.pendingQRAuth {
                     self.pendingQRAuth = false
                     Task { await self.requestQRCodeNow() }
                 }
@@ -161,14 +166,25 @@ final class TelegramClient: ObservableObject {
             return
         }
 
+        // If client is in QR wait state or not yet ready, store phone and recreate
+        if case .authorizationStateWaitPhoneNumber = authState {
+            // Already in the right state, send directly
+            await sendPhoneNumberNow(formatted)
+        } else {
+            // Store phone number for when state reaches waitPhoneNumber
+            pendingPhoneNumber = formatted
+            pendingQRAuth = false
+            isProcessingAuth = true
+            if case .authorizationStateWaitOtherDeviceConfirmation = authState {
+                recreateClient()
+            }
+            // handleAuthState will auto-call sendPhoneNumberNow when ready
+        }
+    }
+
+    private func sendPhoneNumberNow(_ formatted: String) async {
         isProcessingAuth = true
         defer { isProcessingAuth = false }
-
-        // If client was previously in QR wait state, reset it so phone login is accepted by TDLib
-        if case .authorizationStateWaitOtherDeviceConfirmation = authState {
-            recreateClient()
-            try? await Task.sleep(nanoseconds: 600_000_000)
-        }
 
         do {
             let settings = PhoneNumberAuthenticationSettings(
