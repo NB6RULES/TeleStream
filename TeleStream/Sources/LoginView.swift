@@ -203,10 +203,49 @@ struct LoginView: View {
         }
     }
 
+    @State private var selectedCountry: Country = Country.defaultCountry
+    @State private var showCountryPicker = false
+
     // MARK: - Phone Login View
 
     private var phoneLoginView: some View {
         VStack(spacing: 18) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Country / Region")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(Color(hex: "C1C6D7"))
+                    .padding(.horizontal, 24)
+
+                // Country Selector Button
+                Button(action: { showCountryPicker = true }) {
+                    HStack(spacing: 12) {
+                        Text(selectedCountry.flag)
+                            .font(.system(size: 24))
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("\(selectedCountry.name) (\(selectedCountry.iso))")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundColor(.white)
+                                .lineLimit(1)
+                        }
+
+                        Spacer()
+
+                        Text(selectedCountry.dialCode)
+                            .font(.system(size: 15, weight: .semibold, design: .monospaced))
+                            .foregroundColor(Color(hex: "ADC6FF"))
+
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(Color(hex: "8B90A0"))
+                    }
+                    .padding(14)
+                    .background(Color(hex: "1E1F23"))
+                    .cornerRadius(12)
+                }
+                .padding(.horizontal, 24)
+            }
+
             VStack(alignment: .leading, spacing: 8) {
                 Text("Phone Number")
                     .font(.system(size: 13, weight: .medium))
@@ -214,11 +253,15 @@ struct LoginView: View {
                     .padding(.horizontal, 24)
 
                 HStack(spacing: 10) {
-                    Image(systemName: "phone.fill")
-                        .foregroundColor(Color(hex: "8B90A0"))
-                        .font(.system(size: 16))
+                    Text(selectedCountry.dialCode)
+                        .font(.system(size: 16, weight: .bold, design: .monospaced))
+                        .foregroundColor(Color(hex: "ADC6FF"))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color(hex: "ADC6FF").opacity(0.15))
+                        .cornerRadius(6)
 
-                    TextField("", text: $phoneNumber, prompt: Text("+1 234 567 8900").foregroundColor(Color(hex: "8B90A0")))
+                    TextField("", text: $phoneNumber, prompt: Text("Phone Number").foregroundColor(Color(hex: "8B90A0")))
                         .font(.system(size: 17))
                         .foregroundColor(.white)
                         .keyboardType(.phonePad)
@@ -229,7 +272,7 @@ struct LoginView: View {
                 .padding(.horizontal, 24)
             }
 
-            Text("Enter your full phone number including your country code (e.g. +1 for US, +44 for UK, +91 for India).")
+            Text("Telegram will send a confirmation code to your Telegram app.")
                 .font(.system(size: 13))
                 .foregroundColor(Color(hex: "8B90A0"))
                 .multilineTextAlignment(.center)
@@ -237,7 +280,15 @@ struct LoginView: View {
 
             Button(action: {
                 Task {
-                    await client.sendPhoneNumber(phoneNumber)
+                    var cleaned = phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if cleaned.hasPrefix("+") {
+                        // User entered full international number
+                        await client.sendPhoneNumber(cleaned)
+                    } else if cleaned.hasPrefix(selectedCountry.dialCode.replacingOccurrences(of: "+", with: "")) {
+                        await client.sendPhoneNumber("+\(cleaned)")
+                    } else {
+                        await client.sendPhoneNumber("\(selectedCountry.dialCode)\(cleaned)")
+                    }
                 }
             }) {
                 HStack(spacing: 8) {
@@ -257,6 +308,9 @@ struct LoginView: View {
             .disabled(phoneNumber.trimmingCharacters(in: .whitespaces).isEmpty || client.isProcessingAuth)
             .padding(.horizontal, 24)
             .padding(.top, 6)
+        }
+        .sheet(isPresented: $showCountryPicker) {
+            CountryPickerSheet(selectedCountry: $selectedCountry)
         }
     }
 
@@ -494,5 +548,174 @@ struct LoginView: View {
             }
         }
         return UIImage(systemName: "xmark.circle") ?? UIImage()
+    }
+}
+
+// MARK: - Country Model & Picker Sheet
+
+struct Country: Identifiable, Hashable {
+    var id: String { iso }
+    let name: String
+    let dialCode: String
+    let flag: String
+    let iso: String
+
+    static let defaultCountry = Country(name: "India", dialCode: "+91", flag: "🇮🇳", iso: "IN")
+
+    static let allCountries: [Country] = [
+        Country(name: "Bahrain", dialCode: "+973", flag: "🇧🇭", iso: "BH"),
+        Country(name: "India", dialCode: "+91", flag: "🇮🇳", iso: "IN"),
+        Country(name: "United States", dialCode: "+1", flag: "🇺🇸", iso: "US"),
+        Country(name: "United Kingdom", dialCode: "+44", flag: "🇬🇧", iso: "GB"),
+        Country(name: "United Arab Emirates", dialCode: "+971", flag: "🇦🇪", iso: "AE"),
+        Country(name: "Saudi Arabia", dialCode: "+966", flag: "🇸🇦", iso: "SA"),
+        Country(name: "Kuwait", dialCode: "+965", flag: "🇰🇼", iso: "KW"),
+        Country(name: "Qatar", dialCode: "+974", flag: "🇶🇦", iso: "QA"),
+        Country(name: "Oman", dialCode: "+968", flag: "🇴🇲", iso: "OM"),
+        Country(name: "Canada", dialCode: "+1", flag: "🇨🇦", iso: "CA"),
+        Country(name: "Australia", dialCode: "+61", flag: "🇦🇺", iso: "AU"),
+        Country(name: "Germany", dialCode: "+49", flag: "🇩🇪", iso: "DE"),
+        Country(name: "France", dialCode: "+33", flag: "🇫🇷", iso: "FR"),
+        Country(name: "Italy", dialCode: "+39", flag: "🇮🇹", iso: "IT"),
+        Country(name: "Spain", dialCode: "+34", flag: "🇪🇸", iso: "ES"),
+        Country(name: "Russia", dialCode: "+7", flag: "🇷🇺", iso: "RU"),
+        Country(name: "China", dialCode: "+86", flag: "🇨🇳", iso: "CN"),
+        Country(name: "Japan", dialCode: "+81", flag: "🇯🇵", iso: "JP"),
+        Country(name: "South Korea", dialCode: "+82", flag: "🇰🇷", iso: "KR"),
+        Country(name: "Singapore", dialCode: "+65", flag: "🇸🇬", iso: "SG"),
+        Country(name: "Malaysia", dialCode: "+60", flag: "🇲🇾", iso: "MY"),
+        Country(name: "Indonesia", dialCode: "+62", flag: "🇮🇩", iso: "ID"),
+        Country(name: "Pakistan", dialCode: "+92", flag: "🇵🇰", iso: "PK"),
+        Country(name: "Bangladesh", dialCode: "+880", flag: "🇧🇩", iso: "BD"),
+        Country(name: "Sri Lanka", dialCode: "+94", flag: "🇱🇰", iso: "LK"),
+        Country(name: "Nepal", dialCode: "+977", flag: "🇳🇵", iso: "NP"),
+        Country(name: "Philippines", dialCode: "+63", flag: "🇵🇭", iso: "PH"),
+        Country(name: "Vietnam", dialCode: "+84", flag: "🇻🇳", iso: "VN"),
+        Country(name: "Thailand", dialCode: "+66", flag: "🇹🇭", iso: "TH"),
+        Country(name: "Turkey", dialCode: "+90", flag: "🇹🇷", iso: "TR"),
+        Country(name: "Egypt", dialCode: "+20", flag: "🇪🇬", iso: "EG"),
+        Country(name: "Nigeria", dialCode: "+234", flag: "🇳🇬", iso: "NG"),
+        Country(name: "South Africa", dialCode: "+27", flag: "🇿🇦", iso: "ZA"),
+        Country(name: "Brazil", dialCode: "+55", flag: "🇧🇷", iso: "BR"),
+        Country(name: "Mexico", dialCode: "+52", flag: "🇲🇽", iso: "MX"),
+        Country(name: "Argentina", dialCode: "+54", flag: "🇦🇷", iso: "AR"),
+        Country(name: "Netherlands", dialCode: "+31", flag: "🇳🇱", iso: "NL"),
+        Country(name: "Switzerland", dialCode: "+41", flag: "🇨🇭", iso: "CH"),
+        Country(name: "Sweden", dialCode: "+46", flag: "🇸🇪", iso: "SE"),
+        Country(name: "Norway", dialCode: "+47", flag: "🇳🇴", iso: "NO"),
+        Country(name: "Poland", dialCode: "+48", flag: "🇵🇱", iso: "PL"),
+        Country(name: "Ukraine", dialCode: "+380", flag: "🇺🇦", iso: "UA"),
+        Country(name: "Iran", dialCode: "+98", flag: "🇮🇷", iso: "IR"),
+        Country(name: "Iraq", dialCode: "+964", flag: "🇮🇶", iso: "IQ"),
+        Country(name: "Jordan", dialCode: "+962", flag: "🇯🇴", iso: "JO"),
+        Country(name: "Lebanon", dialCode: "+961", flag: "🇱🇧", iso: "LB"),
+        Country(name: "Israel", dialCode: "+972", flag: "🇮🇱", iso: "IL"),
+        Country(name: "New Zealand", dialCode: "+64", flag: "🇳🇿", iso: "NZ"),
+        Country(name: "Ireland", dialCode: "+353", flag: "🇮🇪", iso: "IE"),
+        Country(name: "Portugal", dialCode: "+351", flag: "🇵🇹", iso: "PT"),
+        Country(name: "Greece", dialCode: "+30", flag: "🇬🇷", iso: "GR"),
+        Country(name: "Austria", dialCode: "+43", flag: "🇦🇹", iso: "AT"),
+        Country(name: "Belgium", dialCode: "+32", flag: "🇧🇪", iso: "BE"),
+        Country(name: "Denmark", dialCode: "+45", flag: "🇩🇰", iso: "DK"),
+        Country(name: "Finland", dialCode: "+358", flag: "🇫🇮", iso: "FI"),
+        Country(name: "Hong Kong", dialCode: "+852", flag: "🇭🇰", iso: "HK"),
+        Country(name: "Taiwan", dialCode: "+886", flag: "🇹🇼", iso: "TW")
+    ]
+}
+
+struct CountryPickerSheet: View {
+    @Binding var selectedCountry: Country
+    @Environment(\.dismiss) var dismiss
+    @State private var search = ""
+
+    private var filteredCountries: [Country] {
+        if search.trimmingCharacters(in: .whitespaces).isEmpty {
+            return Country.allCountries
+        }
+        let q = search.lowercased().trimmingCharacters(in: .whitespaces)
+        return Country.allCountries.filter {
+            $0.name.lowercased().contains(q) ||
+            $0.dialCode.contains(q) ||
+            $0.iso.lowercased().contains(q)
+        }
+    }
+
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Color.black.ignoresSafeArea()
+
+                VStack(spacing: 12) {
+                    // Search bar
+                    HStack(spacing: 8) {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundColor(Color(hex: "8B90A0"))
+                            .font(.system(size: 16))
+                        TextField("", text: $search, prompt: Text("Search country, ISO or dial code...").foregroundColor(Color(hex: "8B90A0")))
+                            .font(.system(size: 16))
+                            .foregroundColor(.white)
+                        if !search.isEmpty {
+                            Button(action: { search = "" }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(Color(hex: "8B90A0"))
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(Color(hex: "1E1F23"))
+                    .cornerRadius(10)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+
+                    List {
+                        ForEach(filteredCountries) { country in
+                            Button(action: {
+                                selectedCountry = country
+                                dismiss()
+                            }) {
+                                HStack(spacing: 12) {
+                                    Text(country.flag)
+                                        .font(.system(size: 24))
+
+                                    Text(country.name)
+                                        .font(.system(size: 16, weight: .medium))
+                                        .foregroundColor(.white)
+
+                                    Text("(\(country.iso))")
+                                        .font(.system(size: 13))
+                                        .foregroundColor(Color(hex: "8B90A0"))
+
+                                    Spacer()
+
+                                    Text(country.dialCode)
+                                        .font(.system(size: 15, weight: .semibold, design: .monospaced))
+                                        .foregroundColor(Color(hex: "ADC6FF"))
+
+                                    if selectedCountry.iso == country.iso {
+                                        Image(systemName: "checkmark")
+                                            .font(.system(size: 14, weight: .bold))
+                                            .foregroundColor(Color(hex: "007AFF"))
+                                            .padding(.leading, 6)
+                                    }
+                                }
+                                .padding(.vertical, 4)
+                            }
+                            .listRowBackground(Color(hex: "121317"))
+                        }
+                    }
+                    .listStyle(.plain)
+                }
+            }
+            .navigationTitle("Select Country")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") { dismiss() }
+                        .foregroundColor(Color(hex: "ADC6FF"))
+                }
+            }
+        }
+        .preferredColorScheme(.dark)
     }
 }
