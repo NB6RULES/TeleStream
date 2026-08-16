@@ -18,7 +18,7 @@ targets:
     info:
       path: TeleStream/Info.plist
       properties:
-        UILaunchStoryboardName: LaunchScreen
+        UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         UIBackgroundModes:
