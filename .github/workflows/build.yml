@@ -124,7 +124,7 @@ jobs:
                     app["versionDate"] = now
                     if size > 0:
                         app["size"] = size
-                    app["downloadURL"] = "https://github.com/NB6RULES/TeleStream/releases/download/latest/TeleStream.ipa"
+                    app["downloadURL"] = "https://github.com/NB6RULES/TeleStream/releases/latest/download/TeleStream.ipa"
                     
                     if "versions" not in app:
                         app["versions"] = []

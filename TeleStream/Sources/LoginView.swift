@@ -173,7 +173,7 @@ struct LoginView: View {
 
             Button(action: {
                 Task {
-                    await client.startQRAuth()
+                    await client.refreshQRAuth()
                 }
             }) {
                 HStack(spacing: 6) {

@@ -88,6 +88,8 @@ final class TelegramClient: ObservableObject {
                 )
             case .authorizationStateWaitOtherDeviceConfirmation(let confirm):
                 self.qrCodeUrl = confirm.link
+                self.authError = nil
+                self.isProcessingAuth = false
             case .authorizationStateWaitPhoneNumber:
                 // Pending phone login takes priority over QR
                 if let phone = self.pendingPhoneNumber {
@@ -100,10 +102,16 @@ final class TelegramClient: ObservableObject {
                 }
             case .authorizationStateWaitPassword(let pass):
                 self.passwordHint = pass.passwordHint
+                self.authError = nil
+                self.isProcessingAuth = false
+            case .authorizationStateWaitCode:
+                self.authError = nil
+                self.isProcessingAuth = false
             case .authorizationStateReady:
                 self.qrCodeUrl = nil
                 self.authError = nil
                 self.passwordHint = nil
+                self.isProcessingAuth = false
                 Task { await self.fetchCurrentUser() }
             case .authorizationStateClosed:
                 self.recreateClient()
@@ -117,7 +125,7 @@ final class TelegramClient: ObservableObject {
         qrCodeUrl = nil
         authError = nil
         passwordHint = nil
-        pendingQRAuth = false
+        isProcessingAuth = false
         client = manager.createClient(updateHandler: { [weak self] data, _ in
             self?.handleUpdate(data: data)
         })
@@ -130,11 +138,12 @@ final class TelegramClient: ObservableObject {
 
     func startQRAuth() async {
         authError = nil
-        // Only call the API if already in the right state; otherwise flag it for later
+        // If we are already displaying an active QR code, do not re-request
+        if case .authorizationStateWaitOtherDeviceConfirmation = authState, qrCodeUrl != nil {
+            return
+        }
+
         if case .authorizationStateWaitPhoneNumber = authState {
-            await requestQRCodeNow()
-        } else if case .authorizationStateWaitOtherDeviceConfirmation = authState {
-            // Already in QR flow, just refresh
             await requestQRCodeNow()
         } else {
             // TDLib not ready yet — will auto-fire when state reaches waitPhoneNumber
@@ -142,13 +151,35 @@ final class TelegramClient: ObservableObject {
         }
     }
 
+    func refreshQRAuth() async {
+        authError = nil
+        qrCodeUrl = nil
+        pendingQRAuth = true
+        recreateClient()
+    }
+
     private func requestQRCodeNow() async {
+        guard !isProcessingAuth else { return }
+        guard case .authorizationStateWaitPhoneNumber = authState else {
+            if case .authorizationStateWaitOtherDeviceConfirmation = authState {
+                return
+            }
+            pendingQRAuth = true
+            return
+        }
+
         isProcessingAuth = true
         defer { isProcessingAuth = false }
         do {
             let _ = try await client.requestQrCodeAuthentication(otherUserIds: [])
         } catch {
-            authError = "QR login failed: \(error.localizedDescription)"
+            // If already transitioned to confirmation state, ignore error
+            if case .authorizationStateWaitOtherDeviceConfirmation = authState {
+                return
+            }
+            let desc = String(describing: error)
+            let msg = (!desc.isEmpty && !desc.contains("TDLibKit.Error error")) ? desc : error.localizedDescription
+            authError = "QR login failed: \(msg)"
         }
     }
 

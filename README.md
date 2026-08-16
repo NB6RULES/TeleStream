@@ -20,21 +20,24 @@ The latest IPA is automatically built and published on every commit:
 
 **[Download Latest IPA](../../releases/tag/latest)**
 
-### Real-Time Updates via LiveContainer / SideStore / AltStore Source
+### Real-Time Updates via SideStore / AltStore / LiveContainer Source
 
-You can add this repository directly to **LiveContainer**, **SideStore**, or **AltStore** to receive automated 1-click updates in real time whenever a new build is released!
+You can add this repository directly to **SideStore**, **AltStore**, or **LiveContainer** to receive automated 1-click updates in real time whenever a new build is released!
 
-**Source URL to add:**
+[![Add to SideStore](https://img.shields.io/badge/SideStore-Add%20Source-blue?style=for-the-badge&logo=apple)](sidestore://source?url=https://raw.githubusercontent.com/NB6RULES/TeleStream/main/sources.json)
+[![Add to AltStore](https://img.shields.io/badge/AltStore-Add%20Source-10B981?style=for-the-badge&logo=apple)](altstore://source?url=https://raw.githubusercontent.com/NB6RULES/TeleStream/main/sources.json)
+
+**Source URL to add manually:**
 ```text
 https://raw.githubusercontent.com/NB6RULES/TeleStream/main/sources.json
 ```
 
 **How to add:**
-1. Open **LiveContainer** (or SideStore / AltStore).
+1. Open **SideStore**, **AltStore**, or **LiveContainer**.
 2. Go to the **Sources** tab.
-3. Tap **+** (Add Source) and paste the URL above:
+3. Tap **+** (Add Source) and paste:
    `https://raw.githubusercontent.com/NB6RULES/TeleStream/main/sources.json`
-4. TeleStream will now appear in your apps list, with instant update notifications whenever code is pushed!
+4. TeleStream will appear in your apps list with instant updates whenever a new version is built!
 
 ### Manual Installation
 
