@@ -302,18 +302,40 @@ final class TelegramClient: ObservableObject {
         return nil
     }
 
-    func getChatPhoto(chatId: Int64) async -> String? {
-        do {
-            let chat = try await client.getChat(chatId: chatId)
-            guard let photo = chat.photo else { return nil }
-            let smallFile = photo.small
-            if smallFile.local.isDownloadingCompleted {
-                return smallFile.local.path
-            }
-            return await downloadPhoto(fileId: smallFile.id)
-        } catch {
-            return nil
+    // MARK: - Video / Document Thumbnail Cache
+
+    private var thumbnailCache = NSCache<NSNumber, UIImage>()
+
+    func getThumbnail(file: TDLibKit.File?) async -> UIImage? {
+        guard let file = file else { return nil }
+        let key = NSNumber(value: file.id)
+        if let cached = thumbnailCache.object(forKey: key) {
+            return cached
         }
+        if file.local.isDownloadingCompleted && !file.local.path.isEmpty {
+            if let img = UIImage(contentsOfFile: file.local.path) {
+                thumbnailCache.setObject(img, forKey: key)
+                return img
+            }
+        }
+        do {
+            let downloaded = try await client.downloadFile(
+                fileId: file.id,
+                limit: 0,
+                offset: 0,
+                priority: 1,
+                synchronous: true
+            )
+            if downloaded.local.isDownloadingCompleted && !downloaded.local.path.isEmpty {
+                if let img = UIImage(contentsOfFile: downloaded.local.path) {
+                    thumbnailCache.setObject(img, forKey: key)
+                    return img
+                }
+            }
+        } catch {
+            // ignore thumbnail download error
+        }
+        return nil
     }
 
     // MARK: - Cache Management

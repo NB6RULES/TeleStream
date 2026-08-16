@@ -206,11 +206,15 @@ final class TDResourceLoaderDelegate: NSObject, AVAssetResourceLoaderDelegate {
             return length
         }
 
-        let downloadStart = Int64(file.local.downloadOffset)
-        let downloadEnd = downloadStart + Int64(file.local.downloadedPrefixSize)
+        let prefix = Int64(file.local.downloadedPrefixSize)
+        if prefix > 0 && offset < prefix {
+            return Int(min(Int64(length), prefix - offset))
+        }
 
-        if offset >= downloadStart && offset < downloadEnd {
-            return Int(min(Int64(length), downloadEnd - offset))
+        let chunkStart = Int64(file.local.downloadOffset)
+        let chunkEnd = chunkStart + prefix
+        if prefix > 0 && offset >= chunkStart && offset < chunkEnd {
+            return Int(min(Int64(length), chunkEnd - offset))
         }
 
         return 0

@@ -45,35 +45,77 @@ struct PlayerView: View {
                 .transition(.opacity)
             }
 
-            // Error Overlay
+            // Error Overlay with Back buttons
             if let error = viewModel.error {
-                VStack(spacing: 16) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 40))
-                        .foregroundColor(Color(hex: "FFB4AB"))
-                    Text(error)
-                        .font(.system(size: 15))
-                        .foregroundColor(.white.opacity(0.8))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
+                ZStack(alignment: .topLeading) {
+                    // Top-left Back button
                     Button(action: {
-                        viewModel.setup(fileId: fileId, fileSize: fileSize, fileName: fileName, client: client)
+                        dismiss()
                     }) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "arrow.clockwise")
-                            Text("Retry")
+                        HStack(spacing: 6) {
+                            Image(systemName: "chevron.backward")
+                                .font(.system(size: 16, weight: .bold))
+                            Text("Back")
+                                .font(.system(size: 15, weight: .semibold))
                         }
-                        .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.white)
-                        .padding(.horizontal, 28)
-                        .padding(.vertical, 12)
-                        .background(Color(hex: "007AFF"))
-                        .cornerRadius(24)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(Color.black.opacity(0.6))
+                        .clipShape(Capsule())
+                    }
+                    .padding(.top, 50)
+                    .padding(.leading, 20)
+
+                    // Centered Error Card
+                    VStack {
+                        Spacer()
+                        VStack(spacing: 16) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 44))
+                                .foregroundColor(Color(hex: "FFB4AB"))
+                            Text(error)
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(.white.opacity(0.9))
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 24)
+
+                            HStack(spacing: 14) {
+                                Button(action: {
+                                    dismiss()
+                                }) {
+                                    Text("Back")
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .foregroundColor(.white.opacity(0.85))
+                                        .padding(.horizontal, 24)
+                                        .padding(.vertical, 12)
+                                        .background(Color.white.opacity(0.15))
+                                        .cornerRadius(24)
+                                }
+
+                                Button(action: {
+                                    viewModel.setup(fileId: fileId, fileSize: fileSize, fileName: fileName, client: client)
+                                }) {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "arrow.clockwise")
+                                        Text("Retry")
+                                    }
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 28)
+                                    .padding(.vertical, 12)
+                                    .background(Color(hex: "007AFF"))
+                                    .cornerRadius(24)
+                                }
+                            }
+                        }
+                        .padding(24)
+                        .background(Color.black.opacity(0.85))
+                        .cornerRadius(20)
+                        .padding(.horizontal, 24)
+                        Spacer()
                     }
                 }
-                .padding(24)
-                .background(Color.black.opacity(0.85))
-                .cornerRadius(20)
             }
 
             // Custom Player Controls Overlay

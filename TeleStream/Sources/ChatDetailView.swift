@@ -66,7 +66,7 @@ struct ChatDetailView: View {
                                         if let video = info.video {
                                             VideoCard(video: video, caption: info.caption, timestamp: message.date)
                                         } else {
-                                            DocumentVideoCard(fileName: info.fileName, fileSize: info.fileSize, caption: info.caption, timestamp: message.date, fileId: info.fileId, duration: info.duration)
+                                            DocumentVideoCard(fileName: info.fileName, fileSize: info.fileSize, caption: info.caption, timestamp: message.date, fileId: info.fileId, duration: info.duration, thumbnailFile: info.thumbnailFile)
                                         }
                                     }
                                 }
@@ -79,15 +79,11 @@ struct ChatDetailView: View {
         }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button(action: { Task { await refreshVideos() } }) {
-                    Image(systemName: "arrow.clockwise")
-                        .foregroundColor(Color(hex: "E3E2E7"))
-                }
-            }
-        }
+        .preferredColorScheme(.dark)
         .task {
+            await refreshVideos()
+        }
+        .refreshable {
             await refreshVideos()
         }
     }
@@ -99,6 +95,7 @@ struct ChatDetailView: View {
         let duration: Int
         let caption: String
         let video: Video?
+        let thumbnailFile: TDLibKit.File?
     }
 
     private func extractVideoInfo(from message: Message) -> VideoInfo? {
@@ -111,17 +108,20 @@ struct ChatDetailView: View {
                 fileName: v.fileName.isEmpty ? "Video" : v.fileName,
                 duration: v.duration,
                 caption: vc.caption.text,
-                video: v
+                video: v,
+                thumbnailFile: v.thumbnail?.file
             )
         case .messageDocument(let dc):
             let d = dc.document
+            let size = Int64(d.document.size > 0 ? d.document.size : (d.document.expectedSize > 0 ? d.document.expectedSize : 0))
             return VideoInfo(
                 fileId: d.document.id,
-                fileSize: Int64(d.document.size > 0 ? d.document.size : d.document.expectedSize),
+                fileSize: size,
                 fileName: d.fileName.isEmpty ? "Video" : d.fileName,
                 duration: 0,
                 caption: dc.caption.text,
-                video: nil
+                video: nil,
+                thumbnailFile: d.thumbnail?.file
             )
         default:
             return nil
@@ -143,8 +143,14 @@ struct ChatDetailView: View {
         if hideBelow > 0 {
             let minBytes = Int64(hideBelow) * 1024 * 1024
             result = result.filter { msg in
-                guard let info = extractVideoInfo(from: msg) else { return false }
-                return info.fileSize >= minBytes
+                switch msg.content {
+                case .messageVideo(let vc):
+                    return Int64(vc.video.video.size) >= minBytes
+                case .messageDocument(let dc):
+                    return Int64(dc.document.document.size) >= minBytes
+                default:
+                    return true
+                }
             }
         }
 
@@ -184,6 +190,28 @@ struct ChatDetailView: View {
     }
 }
 
+struct RemoteThumbnailView: View {
+    let thumbnailFile: TDLibKit.File?
+    @EnvironmentObject var client: TelegramClient
+    @State private var image: UIImage? = nil
+
+    var body: some View {
+        ZStack {
+            Color(hex: "121317")
+
+            if let img = image {
+                Image(uiImage: img)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            }
+        }
+        .task {
+            guard let file = thumbnailFile else { return }
+            image = await client.getThumbnail(file: file)
+        }
+    }
+}
+
 struct VideoCard: View {
     let video: Video
     let caption: String
@@ -196,13 +224,24 @@ struct VideoCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ZStack(alignment: .center) {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color(hex: "121317"))
-                    .aspectRatio(16/9, contentMode: .fit)
+                RemoteThumbnailView(thumbnailFile: video.thumbnail?.file)
+                    .aspectRatio(16/9, contentMode: .fill)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 190)
+                    .clipped()
+                    .cornerRadius(12)
+
+                LinearGradient(
+                    colors: [Color.black.opacity(0.1), Color.black.opacity(0.65)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .cornerRadius(12)
 
                 Image(systemName: "play.circle.fill")
-                    .font(.system(size: 44))
-                    .foregroundColor(.white.opacity(0.8))
+                    .font(.system(size: 46))
+                    .foregroundColor(.white.opacity(0.85))
+                    .shadow(color: .black.opacity(0.6), radius: 6)
 
                 VStack {
                     HStack {
@@ -335,6 +374,7 @@ struct DocumentVideoCard: View {
     let timestamp: Int
     let fileId: Int
     let duration: Int
+    var thumbnailFile: TDLibKit.File? = nil
 
     private var episodeInfo: EpisodeInfo? {
         EpisodeDetector.detect(from: fileName)
@@ -347,21 +387,42 @@ struct DocumentVideoCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ZStack(alignment: .center) {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color(hex: "121317"))
-                    .aspectRatio(16/9, contentMode: .fit)
+                if let thumb = thumbnailFile {
+                    RemoteThumbnailView(thumbnailFile: thumb)
+                        .aspectRatio(16/9, contentMode: .fill)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 190)
+                        .clipped()
+                        .cornerRadius(12)
 
-                VStack(spacing: 8) {
-                    Image(systemName: "doc.fill")
-                        .font(.system(size: 32))
-                        .foregroundColor(.white.opacity(0.6))
-                    Text(fileExtension)
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(Color(hex: "ADC6FF"))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(Color(hex: "ADC6FF").opacity(0.2))
-                        .clipShape(Capsule())
+                    LinearGradient(
+                        colors: [Color.black.opacity(0.1), Color.black.opacity(0.65)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .cornerRadius(12)
+
+                    Image(systemName: "play.circle.fill")
+                        .font(.system(size: 46))
+                        .foregroundColor(.white.opacity(0.85))
+                        .shadow(color: .black.opacity(0.6), radius: 6)
+                } else {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color(hex: "121317"))
+                        .aspectRatio(16/9, contentMode: .fit)
+
+                    VStack(spacing: 8) {
+                        Image(systemName: "doc.fill")
+                            .font(.system(size: 32))
+                            .foregroundColor(.white.opacity(0.6))
+                        Text(fileExtension)
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(Color(hex: "ADC6FF"))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(Color(hex: "ADC6FF").opacity(0.2))
+                            .clipShape(Capsule())
+                    }
                 }
 
                 VStack {
