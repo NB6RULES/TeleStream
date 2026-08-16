@@ -97,6 +97,8 @@ final class TelegramClient: ObservableObject {
                 self.authError = nil
                 self.passwordHint = nil
                 Task { await self.fetchCurrentUser() }
+            case .authorizationStateClosed:
+                self.reinitClient()
             default:
                 break
             }
@@ -353,7 +355,30 @@ final class TelegramClient: ObservableObject {
     // MARK: - Logout
 
     func logout() async {
-        let _ = try? await client.logOut()
+        do {
+            let _ = try await client.logOut()
+        } catch {
+            print("Logout error: \(error)")
+        }
+        reinitClient()
+    }
+
+    func reinitClient() {
+        self.authState = nil
+        self.qrCodeUrl = nil
+        self.authError = nil
+        self.passwordHint = nil
+        self.currentUserName = ""
+        self.currentUserPhone = ""
+        self.isProcessingAuth = false
+
+        client = manager.createClient(updateHandler: { [weak self] data, _ in
+            self?.handleUpdate(data: data)
+        })
+
+        Task {
+            await start()
+        }
     }
 }
 
