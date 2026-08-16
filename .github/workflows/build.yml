@@ -96,38 +96,8 @@ jobs:
 
         gh release create "$VERSION_TAG" TeleStream.ipa \
           --title "TeleStream v${VERSION}" \
-          --notes "$NOTES"
-
-    - name: Update Latest Release
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: |
-        VERSION="${{ steps.version.outputs.version }}"
-
-        # Delete existing 'latest' release/tag
-        gh release delete latest --yes 2>/dev/null || true
-        git tag -d latest 2>/dev/null || true
-        git push origin :refs/tags/latest 2>/dev/null || true
-
-        # Create 'latest' pointing to this build
-        git tag latest
-        git push origin latest --force
-
-        NOTES="## Latest Build (v${VERSION})
-
-        This release always points to the most recent successful build.
-        Direct download: https://github.com/NB6RULES/TeleStream/releases/download/latest/TeleStream.ipa
-
-        Built from commit $(git rev-parse --short HEAD) on $(date -u '+%Y-%m-%d %H:%M UTC')
-
-        ### Install on iPhone
-        1. Download **TeleStream.ipa** below
-        2. Use LiveContainer, AltStore, or SideStore to install
-        3. Open the app and log in with QR code or phone number"
-
-        gh release create latest TeleStream.ipa \
-          --title "TeleStream Latest (v${VERSION})" \
-          --notes "$NOTES"
+          --notes "$NOTES" \
+          --latest
 
     - name: Update sources.json
       env:
