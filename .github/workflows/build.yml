@@ -10,18 +10,13 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 30
     steps:
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
         fetch-tags: true
-
-    - name: Select Xcode
-      run: |
-        sudo xcode-select -s /Applications/Xcode_15.2.app
-        xcodebuild -version
 
     - name: Install Xcodegen
       run: brew install xcodegen
