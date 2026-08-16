@@ -91,6 +91,7 @@ struct MainTabView: View {
 
 struct ContinueWatchingRow: View {
     @ObservedObject var settings = AppSettings.shared
+    @State private var selectedPlayerItem: ActivePlayerItem? = nil
 
     var body: some View {
         if !settings.continueWatching.isEmpty {
@@ -110,23 +111,38 @@ struct ContinueWatchingRow: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 12) {
                         ForEach(settings.continueWatching) { item in
-                            NavigationLink(destination: PlayerView(
-                                fileId: item.fileId,
-                                fileSize: item.fileSize,
-                                fileName: item.fileName,
-                                chatId: item.chatId,
-                                chatTitle: item.chatTitle,
-                                duration: item.duration,
-                                thumbnailFileId: item.thumbnailFileId
-                            )) {
+                            Button(action: {
+                                selectedPlayerItem = ActivePlayerItem(
+                                    fileId: item.fileId,
+                                    fileSize: item.fileSize,
+                                    fileName: item.fileName,
+                                    chatId: item.chatId,
+                                    chatTitle: item.chatTitle,
+                                    duration: item.duration,
+                                    thumbnailFileId: item.thumbnailFileId
+                                )
+                            }) {
                                 ContinueWatchingCard(item: item)
                             }
+                            .buttonStyle(PlainButtonStyle())
                         }
                     }
                     .padding(.horizontal, 16)
                 }
             }
             .padding(.vertical, 8)
+            .fullScreenCover(item: $selectedPlayerItem) { item in
+                PlayerView(
+                    fileId: item.fileId,
+                    fileSize: item.fileSize,
+                    fileName: item.fileName,
+                    chatId: item.chatId,
+                    chatTitle: item.chatTitle,
+                    duration: item.duration,
+                    thumbnailFileId: item.thumbnailFileId,
+                    allVideos: item.allVideos
+                )
+            }
         }
     }
 }

@@ -9,6 +9,7 @@ struct ChatDetailView: View {
     @State private var videos: [Message] = []
     @State private var isLoading = true
     @State private var searchText = ""
+    @State private var selectedPlayerItem: ActivePlayerItem? = nil
 
     var body: some View {
         ZStack {
@@ -54,22 +55,25 @@ struct ChatDetailView: View {
                         LazyVStack(spacing: 12) {
                             ForEach(filteredVideos, id: \.id) { message in
                                 if let info = extractVideoInfo(from: message) {
-                                    NavigationLink(destination: PlayerView(
-                                        fileId: info.fileId,
-                                        fileSize: info.fileSize,
-                                        fileName: info.fileName,
-                                        chatId: chatId,
-                                        chatTitle: title,
-                                        duration: info.duration,
-                                        thumbnailFileId: info.thumbnailFile?.id,
-                                        allVideos: allVideosList
-                                    )) {
+                                    Button(action: {
+                                        selectedPlayerItem = ActivePlayerItem(
+                                            fileId: info.fileId,
+                                            fileSize: info.fileSize,
+                                            fileName: info.fileName,
+                                            chatId: chatId,
+                                            chatTitle: title,
+                                            duration: info.duration,
+                                            thumbnailFileId: info.thumbnailFile?.id,
+                                            allVideos: allVideosList
+                                        )
+                                    }) {
                                         if let video = info.video {
                                             VideoCard(video: video, caption: info.caption, timestamp: message.date)
                                         } else {
                                             DocumentVideoCard(fileName: info.fileName, fileSize: info.fileSize, caption: info.caption, timestamp: message.date, fileId: info.fileId, duration: info.duration, thumbnailFile: info.thumbnailFile)
                                         }
                                     }
+                                    .buttonStyle(PlainButtonStyle())
                                 }
                             }
                         }
@@ -81,6 +85,18 @@ struct ChatDetailView: View {
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .preferredColorScheme(.dark)
+        .fullScreenCover(item: $selectedPlayerItem) { item in
+            PlayerView(
+                fileId: item.fileId,
+                fileSize: item.fileSize,
+                fileName: item.fileName,
+                chatId: item.chatId,
+                chatTitle: item.chatTitle,
+                duration: item.duration,
+                thumbnailFileId: item.thumbnailFileId,
+                allVideos: item.allVideos
+            )
+        }
         .task {
             await refreshVideos()
         }

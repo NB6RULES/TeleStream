@@ -5,6 +5,7 @@ struct HistoryView: View {
     @EnvironmentObject var client: TelegramClient
     @State private var searchText = ""
     @State private var showClearConfirm = false
+    @State private var selectedPlayerItem: ActivePlayerItem? = nil
 
     private var filteredItems: [ContinueWatchingItem] {
         if searchText.isEmpty {
@@ -62,15 +63,17 @@ struct HistoryView: View {
                             ScrollView {
                                 LazyVStack(spacing: 12) {
                                     ForEach(filteredItems) { item in
-                                        NavigationLink(destination: PlayerView(
-                                            fileId: item.fileId,
-                                            fileSize: item.fileSize,
-                                            fileName: item.fileName,
-                                            chatId: item.chatId,
-                                            chatTitle: item.chatTitle,
-                                            duration: item.duration,
-                                            thumbnailFileId: item.thumbnailFileId
-                                        )) {
+                                        Button(action: {
+                                            selectedPlayerItem = ActivePlayerItem(
+                                                fileId: item.fileId,
+                                                fileSize: item.fileSize,
+                                                fileName: item.fileName,
+                                                chatId: item.chatId,
+                                                chatTitle: item.chatTitle,
+                                                duration: item.duration,
+                                                thumbnailFileId: item.thumbnailFileId
+                                            )
+                                        }) {
                                             HistoryCard(item: item) {
                                                 withAnimation {
                                                     settings.clearPosition(fileId: item.fileId)
@@ -123,6 +126,18 @@ struct HistoryView: View {
         }
         .navigationViewStyle(StackNavigationViewStyle())
         .preferredColorScheme(.dark)
+        .fullScreenCover(item: $selectedPlayerItem) { item in
+            PlayerView(
+                fileId: item.fileId,
+                fileSize: item.fileSize,
+                fileName: item.fileName,
+                chatId: item.chatId,
+                chatTitle: item.chatTitle,
+                duration: item.duration,
+                thumbnailFileId: item.thumbnailFileId,
+                allVideos: item.allVideos
+            )
+        }
     }
 
     private var emptyStateView: some View {

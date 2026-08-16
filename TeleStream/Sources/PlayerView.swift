@@ -4,6 +4,22 @@ import AVFoundation
 import UIKit
 import Combine
 
+struct ActivePlayerItem: Identifiable, Equatable {
+    var id: Int { fileId }
+    let fileId: Int
+    let fileSize: Int64
+    let fileName: String
+    var chatId: Int64 = 0
+    var chatTitle: String = ""
+    var duration: Int = 0
+    var thumbnailFileId: Int? = nil
+    var allVideos: [(fileId: Int, fileName: String, fileSize: Int64)] = []
+
+    static func == (lhs: ActivePlayerItem, rhs: ActivePlayerItem) -> Bool {
+        lhs.fileId == rhs.fileId
+    }
+}
+
 struct PlayerView: View {
     let fileId: Int
     let fileSize: Int64
@@ -562,7 +578,7 @@ class PlayerViewModel: ObservableObject {
 
         player.replaceCurrentItem(with: playerItem)
         setupPositionTracking()
-        setupEndObserver()
+        setupEndObserver(for: playerItem)
         resetControlsTimer()
     }
 
@@ -620,9 +636,9 @@ class PlayerViewModel: ObservableObject {
         resetControlsTimer()
     }
 
-    func seek(to timeInSeconds: Double) {
-        currentPosition = timeInSeconds
-        let time = CMTime(seconds: timeInSeconds, preferredTimescale: 600)
+    func seek(to seconds: Double) {
+        currentPosition = seconds
+        let time = CMTime(seconds: seconds, preferredTimescale: 600)
         player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -711,7 +727,6 @@ class PlayerViewModel: ObservableObject {
               let video = allVideos.first(where: { $0.fileId == nextId }),
               let client = currentClient else { return }
         cancelAutoNext()
-        AppSettings.shared.clearPosition(fileId: currentFileId)
         teardown()
         setup(fileId: video.fileId, fileSize: video.fileSize, fileName: video.fileName, client: client)
     }
@@ -722,11 +737,14 @@ class PlayerViewModel: ObservableObject {
         showAutoNextCountdown = false
     }
 
+    private var lastSaveTime: Double = 0
+
     private func restorePosition() {
         if let saved = AppSettings.shared.playbackPositions[currentFileId], saved > 3 {
             let time = CMTime(seconds: saved, preferredTimescale: 600)
             player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
             currentPosition = saved
+            lastSaveTime = saved
         }
     }
 
@@ -743,20 +761,28 @@ class PlayerViewModel: ObservableObject {
                     self.totalDuration = dur
                     self.videoDuration = Int(dur)
                 }
+
+                if abs(self.currentPosition - self.lastSaveTime) >= 5.0 {
+                    self.lastSaveTime = self.currentPosition
+                    self.savePosition()
+                }
             }
         }
     }
 
-    private func setupEndObserver() {
+    private func setupEndObserver(for item: AVPlayerItem) {
+        if let obs = endObserver {
+            NotificationCenter.default.removeObserver(obs)
+            endObserver = nil
+        }
         endObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
-            object: nil,
+            object: item,
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.isPlaying = false
-                AppSettings.shared.clearPosition(fileId: self.currentFileId)
                 if self.hasNext && AppSettings.shared.autoNextEpisode {
                     self.startAutoNextCountdown()
                 }
