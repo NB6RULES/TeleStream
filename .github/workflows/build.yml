@@ -61,6 +61,7 @@ jobs:
           -destination "generic/platform=iOS" \
           -configuration Release \
           -derivedDataPath build \
+          OTHER_SWIFT_FLAGS="-no-whole-module-optimization" \
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO \
