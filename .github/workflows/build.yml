@@ -48,7 +48,7 @@ jobs:
           -scheme TeleStream \
           -sdk iphoneos \
           -destination "generic/platform=iOS" \
-          -configuration Release \
+          -configuration Debug \
           -derivedDataPath build \
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO \
@@ -60,7 +60,7 @@ jobs:
       id: package
       run: |
         mkdir -p Payload
-        cp -r build/Build/Products/Release-iphoneos/TeleStream.app Payload/
+        cp -r build/Build/Products/Debug-iphoneos/TeleStream.app Payload/
         plutil -replace CFBundleShortVersionString -string "${{ steps.version.outputs.version }}" Payload/TeleStream.app/Info.plist
         plutil -replace CFBundleVersion -string "${{ steps.version.outputs.version }}" Payload/TeleStream.app/Info.plist
         zip -r TeleStream.ipa Payload
