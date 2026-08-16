@@ -62,7 +62,15 @@ final class TDResourceLoaderDelegate: NSObject, AVAssetResourceLoaderDelegate {
 
         if let contentRequest = request.contentInformationRequest {
             contentRequest.isByteRangeAccessSupported = true
-            contentRequest.contentType = mimeType
+            let uti: String
+            if mimeType.contains("quicktime") || mimeType.contains("mov") {
+                uti = AVFileType.quickTimeMovie.rawValue
+            } else if mimeType.contains("m4v") {
+                uti = AVFileType.m4v.rawValue
+            } else {
+                uti = AVFileType.mp4.rawValue
+            }
+            contentRequest.contentType = uti
             contentRequest.contentLength = fileSize
         }
 

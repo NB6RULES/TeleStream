@@ -9,7 +9,7 @@ struct ContentView: View {
             if let state = client.authState {
                 switch state {
                 case .authorizationStateReady:
-                    ChatListView()
+                    MainTabView()
                 case .authorizationStateWaitOtherDeviceConfirmation,
                      .authorizationStateWaitPhoneNumber,
                      .authorizationStateWaitCode,
@@ -54,6 +54,34 @@ struct ContentView: View {
                 }
             }
         }
+        .preferredColorScheme(.dark)
+    }
+}
+
+struct MainTabView: View {
+    @State private var selectedTab = 0
+
+    var body: some View {
+        TabView(selection: $selectedTab) {
+            ChatListView()
+                .tabItem {
+                    Label("Chats", systemImage: "bubble.left.and.bubble.right.fill")
+                }
+                .tag(0)
+
+            HistoryView()
+                .tabItem {
+                    Label("History", systemImage: "clock.fill")
+                }
+                .tag(1)
+
+            SettingsView()
+                .tabItem {
+                    Label("Settings", systemImage: "gearshape.fill")
+                }
+                .tag(2)
+        }
+        .accentColor(Color(hex: "007AFF"))
         .preferredColorScheme(.dark)
     }
 }

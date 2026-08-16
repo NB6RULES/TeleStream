@@ -62,7 +62,8 @@ class AppSettings: ObservableObject {
 
         // Update continue watching list
         continueWatching.removeAll { $0.fileId == fileId }
-        if position > 5 && position < Double(duration) - 10 {
+        let notAtEnd = duration <= 0 || position < Double(duration) - 5
+        if position > 2 && notAtEnd {
             let item = ContinueWatchingItem(
                 fileId: fileId,
                 fileName: fileName,
@@ -73,8 +74,8 @@ class AppSettings: ObservableObject {
                 lastWatched: Date().timeIntervalSince1970
             )
             continueWatching.insert(item, at: 0)
-            if continueWatching.count > 20 {
-                continueWatching = Array(continueWatching.prefix(20))
+            if continueWatching.count > 50 {
+                continueWatching = Array(continueWatching.prefix(50))
             }
         }
     }

@@ -208,7 +208,7 @@ class PlayerViewModel: ObservableObject {
         self.loaderDelegate = delegate
 
         let ext = URL(fileURLWithPath: fileName).pathExtension.lowercased()
-        let urlExt = ext.isEmpty ? "mp4" : ext
+        let urlExt = (ext == "mov" || ext == "m4v") ? ext : "mp4"
         let url = URL(string: "tdfile://video/\(fileId).\(urlExt)")!
         let asset = AVURLAsset(url: url)
         let queue = DispatchQueue(label: "com.telestream.resourceloader.\(fileId)")
@@ -222,6 +222,10 @@ class PlayerViewModel: ObservableObject {
                 switch item.status {
                 case .readyToPlay:
                     self.isLoading = false
+                    let durSeconds = item.duration.seconds
+                    if durSeconds.isFinite && durSeconds > 0 && self.videoDuration <= 0 {
+                        self.videoDuration = Int(durSeconds)
+                    }
                     self.restorePosition()
                     self.player.play()
                 case .failed:
