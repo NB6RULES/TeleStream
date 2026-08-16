@@ -18,14 +18,6 @@ jobs:
         fetch-depth: 0
         fetch-tags: true
 
-    - name: Select Xcode
-      run: |
-        if [ -d "/Applications/Xcode_15.4.app" ]; then
-          sudo xcode-select -s /Applications/Xcode_15.4.app
-        elif [ -d "/Applications/Xcode.app" ]; then
-          sudo xcode-select -s /Applications/Xcode.app
-        fi
-
     - name: Install Xcodegen
       run: brew install xcodegen
 
