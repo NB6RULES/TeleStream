@@ -18,7 +18,8 @@ A Telegram video streaming client for iOS. Stream videos from your Telegram chat
 
 The latest IPA is automatically built and published on every commit:
 
-**[Download Latest IPA](../../releases/tag/latest)**
+- 🚀 **[Direct Download: TeleStream.ipa](https://github.com/NB6RULES/TeleStream/releases/latest/download/TeleStream.ipa)**
+- 📦 **[View All Releases & Changelog](https://github.com/NB6RULES/TeleStream/releases/latest)**
 
 ### Real-Time Updates via SideStore / AltStore / LiveContainer Source
 
