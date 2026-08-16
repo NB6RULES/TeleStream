@@ -64,6 +64,8 @@ jobs:
       run: |
         mkdir -p Payload
         cp -r build/Build/Products/Release-iphoneos/TeleStream.app Payload/
+        plutil -replace CFBundleShortVersionString -string "${{ steps.version.outputs.version }}" Payload/TeleStream.app/Info.plist
+        plutil -replace CFBundleVersion -string "${{ steps.version.outputs.version }}" Payload/TeleStream.app/Info.plist
         zip -r TeleStream.ipa Payload
         IPA_SIZE=$(stat -f%z TeleStream.ipa 2>/dev/null || stat -c%s TeleStream.ipa 2>/dev/null || echo 0)
         echo "size=$IPA_SIZE" >> "$GITHUB_OUTPUT"
