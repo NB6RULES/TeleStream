@@ -19,7 +19,15 @@ jobs:
         fetch-tags: true
 
     - name: Select Xcode
-      run: sudo xcode-select -s /Applications/Xcode_15.4.app
+      run: |
+        for xc in /Applications/Xcode_16*.app /Applications/Xcode.app; do
+          if [ -d "$xc" ]; then
+            echo "Selecting $xc"
+            sudo xcode-select -s "$xc"
+            break
+          fi
+        done
+        xcodebuild -version
 
     - name: Install Xcodegen
       run: brew install xcodegen
