@@ -19,7 +19,7 @@ jobs:
         fetch-tags: true
 
     - name: Select Xcode
-      run: sudo xcode-select -s /Applications/Xcode_15.2.app
+      run: sudo xcode-select -s /Applications/Xcode_15.4.app
 
     - name: Install Xcodegen
       run: brew install xcodegen
@@ -53,9 +53,6 @@ jobs:
           -destination "generic/platform=iOS" \
           -configuration Release \
           -derivedDataPath build \
-          COMPILER_INDEX_STORE_ENABLE=NO \
-          SWIFT_OPTIMIZATION_LEVEL="-Osize" \
-          SWIFT_COMPILATION_MODE=singlefile \
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO \

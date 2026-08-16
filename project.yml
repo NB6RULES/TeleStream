@@ -3,7 +3,6 @@ options:
   bundleIdPrefix: com.telestream
   deploymentTarget:
     iOS: "16.0"
-  xcodeVersion: "15.0"
 
 packages:
   TDLibKit:
