@@ -7,14 +7,17 @@ final class LocalStreamServer: @unchecked Sendable {
 
     private var listener: NWListener?
     private(set) var port: UInt16 = 0
-    private var client: TelegramClient?
+    private var tdClient: TDLibClient?
+    private var broadcaster: FileUpdateBroadcaster?
     private let lock = NSLock()
     private var activeConnections = [UUID: NWConnection]()
 
     private init() {}
 
+    @MainActor
     func start(with client: TelegramClient) {
-        self.client = client
+        self.tdClient = client.client
+        self.broadcaster = client.fileUpdateBroadcaster
         guard listener == nil else { return }
 
         do {
@@ -224,7 +227,7 @@ final class LocalStreamServer: @unchecked Sendable {
         connection: NWConnection,
         connectionId: UUID
     ) async {
-        guard let tdClient = client?.client, let broadcaster = client?.fileUpdateBroadcaster else {
+        guard let tdClient = self.tdClient, let broadcaster = self.broadcaster else {
             closeConnection(connectionId)
             return
         }
