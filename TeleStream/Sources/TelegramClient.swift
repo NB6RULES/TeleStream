@@ -15,6 +15,7 @@ final class TelegramClient: ObservableObject {
     @Published var currentUserName: String = ""
     @Published var currentUserPhone: String = ""
     @Published var isProcessingAuth: Bool = false
+    @Published var pendingQRAuth: Bool = true
 
     let fileUpdateBroadcaster = FileUpdateBroadcaster()
 
@@ -86,6 +87,12 @@ final class TelegramClient: ObservableObject {
                 )
             case .authorizationStateWaitOtherDeviceConfirmation(let confirm):
                 self.qrCodeUrl = confirm.link
+            case .authorizationStateWaitPhoneNumber:
+                // Auto-trigger QR login if pending (e.g. on first launch or after tab switch)
+                if self.pendingQRAuth {
+                    self.pendingQRAuth = false
+                    Task { await self.requestQRCodeNow() }
+                }
             case .authorizationStateWaitPassword(let pass):
                 self.passwordHint = pass.passwordHint
             case .authorizationStateReady:
@@ -105,6 +112,7 @@ final class TelegramClient: ObservableObject {
         qrCodeUrl = nil
         authError = nil
         passwordHint = nil
+        pendingQRAuth = false
         client = manager.createClient(updateHandler: { [weak self] data, _ in
             self?.handleUpdate(data: data)
         })
@@ -117,6 +125,19 @@ final class TelegramClient: ObservableObject {
 
     func startQRAuth() async {
         authError = nil
+        // Only call the API if already in the right state; otherwise flag it for later
+        if case .authorizationStateWaitPhoneNumber = authState {
+            await requestQRCodeNow()
+        } else if case .authorizationStateWaitOtherDeviceConfirmation = authState {
+            // Already in QR flow, just refresh
+            await requestQRCodeNow()
+        } else {
+            // TDLib not ready yet — will auto-fire when state reaches waitPhoneNumber
+            pendingQRAuth = true
+        }
+    }
+
+    private func requestQRCodeNow() async {
         isProcessingAuth = true
         defer { isProcessingAuth = false }
         do {
