@@ -18,6 +18,9 @@ jobs:
         fetch-depth: 0
         fetch-tags: true
 
+    - name: Select Xcode
+      run: sudo xcode-select -s /Applications/Xcode_15.2.app
+
     - name: Install Xcodegen
       run: brew install xcodegen
 
