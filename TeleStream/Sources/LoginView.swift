@@ -81,14 +81,9 @@ struct LoginView: View {
             }
         }
         .preferredColorScheme(.dark)
-        .onAppear {
-            if selectedTab == 0 && client.qrCodeUrl == nil && !client.isProcessingAuth {
-                Task { await client.startQRAuth() }
-            }
-        }
     }
 
-    // MARK: - Initial Auth View (QR vs Phone Tab)
+    // MARK: - Initial Auth View (Phone vs QR Tab)
 
     private var initialAuthView: some View {
         VStack(spacing: 20) {
@@ -96,21 +91,22 @@ struct LoginView: View {
                 .padding(.horizontal, 24)
 
             if selectedTab == 0 {
-                qrCodeView
-            } else {
                 phoneLoginView
+            } else {
+                qrCodeView
             }
         }
     }
 
     private var segmentedControl: some View {
         HStack(spacing: 0) {
-            tabButton("QR Code", isSelected: selectedTab == 0) {
+            tabButton("Phone Number", isSelected: selectedTab == 0) {
                 selectedTab = 0
-                Task { await client.startQRAuth() }
+                client.resetToPhoneAuth()
             }
-            tabButton("Phone Number", isSelected: selectedTab == 1) {
+            tabButton("QR Code", isSelected: selectedTab == 1) {
                 selectedTab = 1
+                Task { await client.startQRAuth() }
             }
         }
         .padding(3)
@@ -280,15 +276,16 @@ struct LoginView: View {
 
             Button(action: {
                 Task {
-                    var cleaned = phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if cleaned.hasPrefix("+") {
-                        // User entered full international number
-                        await client.sendPhoneNumber(cleaned)
-                    } else if cleaned.hasPrefix(selectedCountry.dialCode.replacingOccurrences(of: "+", with: "")) {
-                        await client.sendPhoneNumber("+\(cleaned)")
-                    } else {
-                        await client.sendPhoneNumber("\(selectedCountry.dialCode)\(cleaned)")
+                    let countryDigits = selectedCountry.dialCode.filter { "0123456789".contains($0) }
+                    var userDigits = phoneNumber.filter { "0123456789".contains($0) }
+                    if userDigits.hasPrefix(countryDigits) {
+                        userDigits = String(userDigits.dropFirst(countryDigits.count))
                     }
+                    if userDigits.hasPrefix("0") {
+                        userDigits = String(userDigits.dropFirst())
+                    }
+                    let fullNumber = "+\(countryDigits)\(userDigits)"
+                    await client.sendPhoneNumber(fullNumber)
                 }
             }) {
                 HStack(spacing: 8) {
@@ -328,11 +325,12 @@ struct LoginView: View {
                     .font(.system(size: 20, weight: .bold))
                     .foregroundColor(.white)
 
-                Text("We've sent a code to your Telegram app or SMS for")
+                Text("Telegram sent a 5-digit code to your Telegram app (or SMS) for")
                     .font(.system(size: 14))
                     .foregroundColor(Color(hex: "8B90A0"))
+                    .multilineTextAlignment(.center)
 
-                Text(phoneNumber.isEmpty ? "your phone" : phoneNumber)
+                Text(phoneNumber.isEmpty ? "your phone" : "\(selectedCountry.dialCode) \(phoneNumber)")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(Color(hex: "ADC6FF"))
             }
@@ -383,7 +381,7 @@ struct LoginView: View {
 
                 Button(action: {
                     verificationCode = ""
-                    client.authState = .authorizationStateWaitPhoneNumber
+                    client.resetToPhoneAuth()
                 }) {
                     Text("Change Number")
                         .font(.system(size: 14, weight: .medium))

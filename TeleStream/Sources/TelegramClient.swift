@@ -108,6 +108,14 @@ final class TelegramClient: ObservableObject {
 
     // MARK: - Auth Methods
 
+    func resetToPhoneAuth() {
+        if case .authorizationStateWaitOtherDeviceConfirmation = authState {
+            qrCodeUrl = nil
+            authError = nil
+            reinitClient()
+        }
+    }
+
     func startQRAuth() async {
         authError = nil
         if let _ = qrCodeUrl { return }
@@ -123,20 +131,27 @@ final class TelegramClient: ObservableObject {
 
     func sendPhoneNumber(_ phone: String) async {
         authError = nil
-        let cleaned = phone.trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: " ", with: "")
-            .replacingOccurrences(of: "-", with: "")
-            .replacingOccurrences(of: "(", with: "")
-            .replacingOccurrences(of: ")", with: "")
-        let formatted = cleaned.hasPrefix("+") ? cleaned : "+\(cleaned)"
-
-        guard formatted.count >= 6 else {
-            authError = "Please enter a valid phone number with country code (e.g. +1234567890)."
+        let digits = phone.filter { "0123456789".contains($0) }
+        guard digits.count >= 6 else {
+            authError = "Please enter a valid phone number with country code."
             return
         }
+        let formatted = "+\(digits)"
 
         isProcessingAuth = true
         defer { isProcessingAuth = false }
+
+        // If TDLib is waiting for QR confirmation, reset to wait for phone number
+        if case .authorizationStateWaitOtherDeviceConfirmation = authState {
+            qrCodeUrl = nil
+            reinitClient()
+            for _ in 0..<30 {
+                if case .authorizationStateWaitPhoneNumber = authState {
+                    break
+                }
+                try? await Task.sleep(nanoseconds: 100_000_000)
+            }
+        }
 
         do {
             let settings = PhoneNumberAuthenticationSettings(
@@ -153,7 +168,16 @@ final class TelegramClient: ObservableObject {
                 settings: settings
             )
         } catch {
-            authError = "Failed to send code: \(error.localizedDescription)"
+            let errStr = error.localizedDescription
+            if errStr.contains("PHONE_NUMBER_INVALID") {
+                authError = "Invalid phone number. Please check the country code and number."
+            } else if errStr.contains("FLOOD_WAIT") {
+                authError = "Too many attempts. Please try again later or use QR Code login."
+            } else if errStr.contains("PHONE_NUMBER_BANNED") {
+                authError = "This phone number is banned by Telegram."
+            } else {
+                authError = "Failed to send code: \(errStr)"
+            }
         }
     }
 
@@ -168,7 +192,14 @@ final class TelegramClient: ObservableObject {
         do {
             let _ = try await client.checkAuthenticationCode(code: cleaned)
         } catch {
-            authError = "Invalid code: \(error.localizedDescription)"
+            let errStr = error.localizedDescription
+            if errStr.contains("PHONE_CODE_INVALID") || errStr.contains("CODE_INVALID") {
+                authError = "Incorrect verification code. Please check and try again."
+            } else if errStr.contains("PHONE_CODE_EXPIRED") {
+                authError = "Verification code has expired. Please request a new code."
+            } else {
+                authError = "Invalid code: \(errStr)"
+            }
         }
     }
 
