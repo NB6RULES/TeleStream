@@ -224,7 +224,7 @@ final class LocalStreamServer: @unchecked Sendable {
         connection: NWConnection,
         connectionId: UUID
     ) async {
-        guard let tdClient = client else {
+        guard let tdClient = client?.client, let broadcaster = client?.fileUpdateBroadcaster else {
             closeConnection(connectionId)
             return
         }
@@ -253,7 +253,7 @@ final class LocalStreamServer: @unchecked Sendable {
                 let available = bytesAvailable(in: file, at: currentOffset, length: bytesToRead)
                 var downloaded = available
                 if downloaded == 0 {
-                    downloaded = await waitForBytes(in: tdClient, at: currentOffset, length: bytesToRead, timeout: 12.0)
+                    downloaded = await waitForBytes(broadcaster: broadcaster, at: currentOffset, length: bytesToRead, timeout: 12.0)
                 }
 
                 if downloaded == 0 {
@@ -312,8 +312,8 @@ final class LocalStreamServer: @unchecked Sendable {
         return 0
     }
 
-    private func waitForBytes(in client: TelegramClient, at offset: Int64, length: Int, timeout: Double) async -> Int {
-        let stream = client.subscribeToFileUpdates()
+    private func waitForBytes(broadcaster: FileUpdateBroadcaster, at offset: Int64, length: Int, timeout: Double) async -> Int {
+        let stream = broadcaster.subscribe()
         let deadline = ContinuousClock.now + .seconds(timeout)
 
         for await file in stream {
