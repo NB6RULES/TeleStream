@@ -9,14 +9,21 @@
       "name": "TeleStream",
       "bundleIdentifier": "com.telestream.TeleStream",
       "developerName": "NB6RULES",
-      "version": "1.04",
-      "versionDate": "2026-08-16T10:42:39Z",
+      "version": "1.05",
+      "versionDate": "2026-08-16T10:56:44Z",
       "versionDescription": "Real-time LiveContainer & AltStore source release with phone login state machine and auth fixes.",
       "downloadURL": "https://github.com/NB6RULES/TeleStream/releases/download/latest/TeleStream.ipa",
       "localizedDescription": "TeleStream is a fast and native iOS audio streaming player powered by TDLibKit to stream and play audio from your Telegram chats, channels, and cloud storage.",
       "tintColor": "#0088CC",
-      "size": 31539305,
+      "size": 31539320,
       "versions": [
+        {
+          "version": "1.05",
+          "date": "2026-08-16T10:56:44Z",
+          "size": 31539320,
+          "downloadURL": "https://github.com/NB6RULES/TeleStream/releases/download/v1.05/TeleStream.ipa",
+          "localizedDescription": "TeleStream v1.05 automated build."
+        },
         {
           "version": "1.04",
           "date": "2026-08-16T10:42:39Z",
