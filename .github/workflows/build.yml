@@ -20,13 +20,7 @@ jobs:
 
     - name: Select Xcode
       run: |
-        for xc in /Applications/Xcode_16*.app /Applications/Xcode.app; do
-          if [ -d "$xc" ]; then
-            echo "Selecting $xc"
-            sudo xcode-select -s "$xc"
-            break
-          fi
-        done
+        sudo xcode-select -s /Applications/Xcode_15.2.app
         xcodebuild -version
 
     - name: Install Xcodegen
@@ -54,14 +48,13 @@ jobs:
     - name: Build App
       run: |
         xcodebuild -resolvePackageDependencies -project TeleStream.xcodeproj
-        xcodebuild clean build \
+        xcodebuild build \
           -project TeleStream.xcodeproj \
           -scheme TeleStream \
           -sdk iphoneos \
           -destination "generic/platform=iOS" \
           -configuration Release \
           -derivedDataPath build \
-          OTHER_SWIFT_FLAGS="-no-whole-module-optimization" \
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO \
