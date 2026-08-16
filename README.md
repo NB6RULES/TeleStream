@@ -20,17 +20,32 @@ The latest IPA is automatically built and published on every commit:
 
 **[Download Latest IPA](../../releases/tag/latest)**
 
-### How to install on iPhone
+### Real-Time Updates via LiveContainer / SideStore / AltStore Source
+
+You can add this repository directly to **LiveContainer**, **SideStore**, or **AltStore** to receive automated 1-click updates in real time whenever a new build is released!
+
+**Source URL to add:**
+```text
+https://raw.githubusercontent.com/NB6RULES/TeleStream/main/sources.json
+```
+
+**How to add:**
+1. Open **LiveContainer** (or SideStore / AltStore).
+2. Go to the **Sources** tab.
+3. Tap **+** (Add Source) and paste the URL above:
+   `https://raw.githubusercontent.com/NB6RULES/TeleStream/main/sources.json`
+4. TeleStream will now appear in your apps list, with instant update notifications whenever code is pushed!
+
+### Manual Installation
 
 1. Download `TeleStream.ipa` from the link above
 2. Install using one of these tools (no jailbreak required):
-   - [AltStore](https://altstore.io) — free, re-sign every 7 days
-   - [Sideloadly](https://sideloadly.io) — free, re-sign every 7 days
-   - [LiveContainer](https://github.com/khanhduytran0/LiveContainer) — no re-signing needed
+   - [LiveContainer](https://github.com/khanhduytran0/LiveContainer) — run unlimited apps without 3-app limit
+   - [AltStore](https://altstore.io) — free sideloading
+   - [SideStore](https://sidestore.io) — on-device sideloading
+   - [Sideloadly](https://sideloadly.io) — PC/Mac installer
 3. Open TeleStream and log in with QR code or your phone number
-4. Browse your chats and stream videos
-
-> **Note:** With a free Apple ID, sideloaded apps expire after 7 days and need re-installing. A paid Apple Developer account ($99/year) extends this to 1 year.
+4. Browse your chats and stream audio/video
 
 ## Building from source
 

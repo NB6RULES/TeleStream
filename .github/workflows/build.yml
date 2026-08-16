@@ -16,6 +16,7 @@ jobs:
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
+        fetch-tags: true
 
     - name: Select Xcode
       run: sudo xcode-select -s /Applications/Xcode_15.2.app
@@ -26,19 +27,18 @@ jobs:
     - name: Determine Version
       id: version
       run: |
-        # Get the latest version tag (v1.XX format)
-        LAST_TAG=$(git tag --list 'v1.*' --sort=-version:refname | head -n 1)
-        if [ -z "$LAST_TAG" ]; then
-          NEW_VERSION="1.01"
-        else
-          # Extract minor number and increment
-          MINOR=$(echo "$LAST_TAG" | sed 's/v1\.//')
-          # Remove leading zeros for arithmetic
-          MINOR_NUM=$((10#$MINOR + 1))
-          NEW_VERSION="1.$(printf '%02d' $MINOR_NUM)"
-        fi
+        git fetch --tags --force origin 2>/dev/null || true
+        HIGHEST_NUM=0
+        for tag in $(git tag -l 'v1.*'); do
+          num=$(echo "$tag" | sed 's/v1\.//' | sed 's/^0*//')
+          if [ -n "$num" ] && [ "$num" -gt "$HIGHEST_NUM" ] 2>/dev/null; then
+            HIGHEST_NUM=$num
+          fi
+        done
+        NEW_NUM=$((HIGHEST_NUM + 1))
+        NEW_VERSION="1.$(printf '%02d' $NEW_NUM)"
         echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
-        echo "Building version $NEW_VERSION"
+        echo "Building version $NEW_VERSION (previous highest was v1.$(printf '%02d' $HIGHEST_NUM))"
 
     - name: Generate Xcode Project
       run: xcodegen generate
@@ -60,10 +60,13 @@ jobs:
           CURRENT_PROJECT_VERSION=${{ github.run_number }}
 
     - name: Package IPA
+      id: package
       run: |
         mkdir -p Payload
         cp -r build/Build/Products/Release-iphoneos/TeleStream.app Payload/
         zip -r TeleStream.ipa Payload
+        IPA_SIZE=$(stat -f%z TeleStream.ipa 2>/dev/null || stat -c%s TeleStream.ipa 2>/dev/null || echo 0)
+        echo "size=$IPA_SIZE" >> "$GITHUB_OUTPUT"
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
@@ -79,8 +82,8 @@ jobs:
         VERSION_TAG="v${VERSION}"
 
         # Create the versioned release
-        git tag "$VERSION_TAG"
-        git push origin "$VERSION_TAG"
+        git tag -f "$VERSION_TAG"
+        git push origin "$VERSION_TAG" --force
 
         NOTES="## TeleStream v${VERSION}
 
@@ -88,7 +91,7 @@ jobs:
 
         ### Install on iPhone
         1. Download **TeleStream.ipa** below
-        2. Use AltStore or Sideloadly to install
+        2. Use LiveContainer, AltStore, or SideStore to install
         3. Open the app and log in with QR code or phone number"
 
         gh release create "$VERSION_TAG" TeleStream.ipa \
@@ -108,7 +111,7 @@ jobs:
 
         # Create 'latest' pointing to this build
         git tag latest
-        git push origin latest
+        git push origin latest --force
 
         NOTES="## Latest Build (v${VERSION})
 
@@ -119,9 +122,60 @@ jobs:
 
         ### Install on iPhone
         1. Download **TeleStream.ipa** below
-        2. Use AltStore or Sideloadly to install
+        2. Use LiveContainer, AltStore, or SideStore to install
         3. Open the app and log in with QR code or phone number"
 
         gh release create latest TeleStream.ipa \
           --title "TeleStream Latest (v${VERSION})" \
           --notes "$NOTES"
+
+    - name: Update sources.json
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        VERSION="${{ steps.version.outputs.version }}"
+        IPA_SIZE="${{ steps.package.outputs.size }}"
+        python3 - <<EOF
+        import json, datetime, os
+
+        version = "$VERSION"
+        size = int("$IPA_SIZE") if "$IPA_SIZE".isdigit() else 0
+        now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        if os.path.exists("sources.json"):
+            with open("sources.json", "r") as f:
+                data = json.load(f)
+            
+            for app in data.get("apps", []):
+                if app.get("bundleIdentifier") == "com.telestream.TeleStream":
+                    app["version"] = version
+                    app["versionDate"] = now
+                    if size > 0:
+                        app["size"] = size
+                    app["downloadURL"] = "https://github.com/NB6RULES/TeleStream/releases/download/latest/TeleStream.ipa"
+                    
+                    if "versions" not in app:
+                        app["versions"] = []
+                    
+                    app["versions"] = [v for v in app["versions"] if v.get("version") != version]
+                    app["versions"].insert(0, {
+                        "version": version,
+                        "date": now,
+                        "size": size,
+                        "downloadURL": f"https://github.com/NB6RULES/TeleStream/releases/download/v{version}/TeleStream.ipa",
+                        "localizedDescription": f"TeleStream v{version} automated build."
+                    })
+                    app["versions"] = app["versions"][:10]
+
+            with open("sources.json", "w") as f:
+                json.dump(data, f, indent=2)
+                f.write("\n")
+        EOF
+
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add sources.json
+        if ! git diff --staged --quiet; then
+          git commit -m "chore: update sources.json for v${VERSION} [skip ci]"
+          git push origin main
+        fi
