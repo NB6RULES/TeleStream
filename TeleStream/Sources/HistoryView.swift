@@ -68,7 +68,8 @@ struct HistoryView: View {
                                             fileName: item.fileName,
                                             chatId: item.chatId,
                                             chatTitle: item.chatTitle,
-                                            duration: item.duration
+                                            duration: item.duration,
+                                            thumbnailFileId: item.thumbnailFileId
                                         )) {
                                             HistoryCard(item: item) {
                                                 withAnimation {
@@ -167,6 +168,32 @@ struct HistoryView: View {
     }
 }
 
+struct FileIdThumbnailView: View {
+    let fileId: Int?
+    @EnvironmentObject var client: TelegramClient
+    @State private var image: UIImage? = nil
+
+    var body: some View {
+        ZStack {
+            Color(hex: "121317")
+
+            if let img = image {
+                Image(uiImage: img)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } else {
+                Image(systemName: "play.fill")
+                    .font(.system(size: 18))
+                    .foregroundColor(Color(hex: "ADC6FF").opacity(0.8))
+            }
+        }
+        .task {
+            guard let id = fileId else { return }
+            image = await client.getThumbnail(fileId: id)
+        }
+    }
+}
+
 struct HistoryCard: View {
     let item: ContinueWatchingItem
     let onDelete: () -> Void
@@ -184,13 +211,10 @@ struct HistoryCard: View {
         HStack(spacing: 14) {
             // Thumbnail / Icon box
             ZStack {
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color(hex: "1E1F23"))
-                    .frame(width: 84, height: 64)
-
-                Image(systemName: "play.fill")
-                    .font(.system(size: 20))
-                    .foregroundColor(Color(hex: "ADC6FF"))
+                FileIdThumbnailView(fileId: item.thumbnailFileId)
+                    .frame(width: 84, height: 60)
+                    .clipped()
+                    .cornerRadius(10)
 
                 // Mini progress bar on thumbnail
                 VStack {
@@ -209,6 +233,7 @@ struct HistoryCard: View {
                 }
                 .cornerRadius(10)
             }
+            .frame(width: 84, height: 60)
 
             // Info
             VStack(alignment: .leading, spacing: 4) {

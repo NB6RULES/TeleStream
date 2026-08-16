@@ -211,6 +211,13 @@ final class TDResourceLoaderDelegate: NSObject, AVAssetResourceLoaderDelegate {
             return Int(min(Int64(length), prefix - offset))
         }
 
+        if !file.local.path.isEmpty,
+           let attrs = try? FileManager.default.attributesOfItem(atPath: file.local.path),
+           let fileSizeOnDisk = attrs[.size] as? Int64,
+           fileSizeOnDisk > offset {
+            return Int(min(Int64(length), fileSizeOnDisk - offset))
+        }
+
         let chunkStart = Int64(file.local.downloadOffset)
         let chunkEnd = chunkStart + prefix
         if prefix > 0 && offset >= chunkStart && offset < chunkEnd {

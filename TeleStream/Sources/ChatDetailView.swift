@@ -61,6 +61,7 @@ struct ChatDetailView: View {
                                         chatId: chatId,
                                         chatTitle: title,
                                         duration: info.duration,
+                                        thumbnailFileId: info.thumbnailFile?.id,
                                         allVideos: allVideosList
                                     )) {
                                         if let video = info.video {

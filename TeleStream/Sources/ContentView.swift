@@ -116,7 +116,8 @@ struct ContinueWatchingRow: View {
                                 fileName: item.fileName,
                                 chatId: item.chatId,
                                 chatTitle: item.chatTitle,
-                                duration: item.duration
+                                duration: item.duration,
+                                thumbnailFileId: item.thumbnailFileId
                             )) {
                                 ContinueWatchingCard(item: item)
                             }
@@ -136,13 +137,15 @@ struct ContinueWatchingCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             ZStack {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color(hex: "121317"))
+                FileIdThumbnailView(fileId: item.thumbnailFileId)
                     .frame(width: 180, height: 100)
+                    .clipped()
+                    .cornerRadius(8)
                     .overlay(
                         Image(systemName: "play.circle.fill")
                             .font(.system(size: 28))
-                            .foregroundColor(.white.opacity(0.7))
+                            .foregroundColor(.white.opacity(0.85))
+                            .shadow(color: .black.opacity(0.6), radius: 4)
                     )
 
                 // Time remaining label

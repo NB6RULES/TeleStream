@@ -57,27 +57,28 @@ class AppSettings: ObservableObject {
         }
     }
 
-    func savePosition(fileId: Int, fileSize: Int64 = 0, position: Double, fileName: String, chatId: Int64, chatTitle: String, duration: Int) {
+    func savePosition(fileId: Int, fileSize: Int64 = 0, position: Double, fileName: String, chatId: Int64, chatTitle: String, duration: Int, thumbnailFileId: Int? = nil) {
         playbackPositions[fileId] = position
 
         // Update continue watching list
+        let existingThumb = continueWatching.first(where: { $0.fileId == fileId })?.thumbnailFileId
+        let thumbId = thumbnailFileId ?? existingThumb
         continueWatching.removeAll { $0.fileId == fileId }
-        let notAtEnd = duration <= 0 || position < Double(duration) - 5
-        if position > 2 && notAtEnd {
-            let item = ContinueWatchingItem(
-                fileId: fileId,
-                fileSize: fileSize,
-                fileName: fileName,
-                chatId: chatId,
-                chatTitle: chatTitle,
-                position: position,
-                duration: duration,
-                lastWatched: Date().timeIntervalSince1970
-            )
-            continueWatching.insert(item, at: 0)
-            if continueWatching.count > 50 {
-                continueWatching = Array(continueWatching.prefix(50))
-            }
+
+        let item = ContinueWatchingItem(
+            fileId: fileId,
+            fileSize: fileSize,
+            fileName: fileName,
+            chatId: chatId,
+            chatTitle: chatTitle,
+            position: position,
+            duration: duration,
+            lastWatched: Date().timeIntervalSince1970,
+            thumbnailFileId: thumbId
+        )
+        continueWatching.insert(item, at: 0)
+        if continueWatching.count > 100 {
+            continueWatching = Array(continueWatching.prefix(100))
         }
     }
 
@@ -98,9 +99,10 @@ struct ContinueWatchingItem: Codable, Identifiable {
     let fileName: String
     let chatId: Int64
     let chatTitle: String
-    let position: Double
+    var position: Double
     let duration: Int
     let lastWatched: Double
+    var thumbnailFileId: Int?
 
     var id: Int { fileId }
 
@@ -110,10 +112,10 @@ struct ContinueWatchingItem: Codable, Identifiable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case fileId, fileSize, fileName, chatId, chatTitle, position, duration, lastWatched
+        case fileId, fileSize, fileName, chatId, chatTitle, position, duration, lastWatched, thumbnailFileId
     }
 
-    init(fileId: Int, fileSize: Int64 = 0, fileName: String, chatId: Int64, chatTitle: String, position: Double, duration: Int, lastWatched: Double) {
+    init(fileId: Int, fileSize: Int64 = 0, fileName: String, chatId: Int64, chatTitle: String, position: Double, duration: Int, lastWatched: Double, thumbnailFileId: Int? = nil) {
         self.fileId = fileId
         self.fileSize = fileSize
         self.fileName = fileName
@@ -122,17 +124,19 @@ struct ContinueWatchingItem: Codable, Identifiable {
         self.position = position
         self.duration = duration
         self.lastWatched = lastWatched
+        self.thumbnailFileId = thumbnailFileId
     }
 
     init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.fileId = try container.decode(Int.self, forKey: .fileId)
-        self.fileSize = try container.decodeIfPresent(Int64.self, forKey: .fileSize) ?? 0
-        self.fileName = try container.decode(String.self, forKey: .fileName)
-        self.chatId = try container.decode(Int64.self, forKey: .chatId)
-        self.chatTitle = try container.decode(String.self, forKey: .chatTitle)
-        self.position = try container.decode(Double.self, forKey: .position)
-        self.duration = try container.decode(Int.self, forKey: .duration)
-        self.lastWatched = try container.decode(Double.self, forKey: .lastWatched)
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        fileId = try c.decode(Int.self, forKey: .fileId)
+        fileSize = try c.decodeIfPresent(Int64.self, forKey: .fileSize) ?? 0
+        fileName = try c.decode(String.self, forKey: .fileName)
+        chatId = try c.decode(Int64.self, forKey: .chatId)
+        chatTitle = try c.decode(String.self, forKey: .chatTitle)
+        position = try c.decode(Double.self, forKey: .position)
+        duration = try c.decode(Int.self, forKey: .duration)
+        lastWatched = try c.decode(Double.self, forKey: .lastWatched)
+        thumbnailFileId = try c.decodeIfPresent(Int.self, forKey: .thumbnailFileId)
     }
 }

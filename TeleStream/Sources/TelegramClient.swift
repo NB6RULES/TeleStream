@@ -309,11 +309,17 @@ final class TelegramClient: ObservableObject {
 
     func getThumbnail(file: TDLibKit.File?) async -> UIImage? {
         guard let file = file else { return nil }
-        let key = NSNumber(value: file.id)
+        return await getThumbnail(fileId: file.id)
+    }
+
+    func getThumbnail(fileId: Int?) async -> UIImage? {
+        guard let fileId = fileId, fileId > 0 else { return nil }
+        let key = NSNumber(value: fileId)
         if let cached = thumbnailCache.object(forKey: key) {
             return cached
         }
-        if file.local.isDownloadingCompleted && !file.local.path.isEmpty {
+        if let file = try? await client.getFile(fileId: fileId),
+           file.local.isDownloadingCompleted && !file.local.path.isEmpty {
             if let img = UIImage(contentsOfFile: file.local.path) {
                 thumbnailCache.setObject(img, forKey: key)
                 return img
@@ -321,7 +327,7 @@ final class TelegramClient: ObservableObject {
         }
         do {
             let downloaded = try await client.downloadFile(
-                fileId: file.id,
+                fileId: fileId,
                 limit: 0,
                 offset: 0,
                 priority: 1,

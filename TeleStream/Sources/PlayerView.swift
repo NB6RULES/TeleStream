@@ -11,6 +11,7 @@ struct PlayerView: View {
     var chatId: Int64 = 0
     var chatTitle: String = ""
     var duration: Int = 0
+    var thumbnailFileId: Int? = nil
     var allVideos: [(fileId: Int, fileName: String, fileSize: Int64)] = []
 
     @EnvironmentObject var client: TelegramClient
@@ -48,24 +49,7 @@ struct PlayerView: View {
             // Error Overlay with Back buttons
             if let error = viewModel.error {
                 ZStack(alignment: .topLeading) {
-                    // Top-left Back button
-                    Button(action: {
-                        dismiss()
-                    }) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "chevron.backward")
-                                .font(.system(size: 16, weight: .bold))
-                            Text("Back")
-                                .font(.system(size: 15, weight: .semibold))
-                        }
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(Color.black.opacity(0.6))
-                        .clipShape(Capsule())
-                    }
-                    .padding(.top, 50)
-                    .padding(.leading, 20)
+                    Color.black.ignoresSafeArea()
 
                     // Centered Error Card
                     VStack {
@@ -110,12 +94,34 @@ struct PlayerView: View {
                             }
                         }
                         .padding(24)
-                        .background(Color.black.opacity(0.85))
+                        .background(Color(hex: "1A1B1F"))
                         .cornerRadius(20)
                         .padding(.horizontal, 24)
                         Spacer()
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                    // Top-left Back button
+                    Button(action: {
+                        dismiss()
+                    }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "chevron.backward")
+                                .font(.system(size: 16, weight: .bold))
+                            Text("Back")
+                                .font(.system(size: 15, weight: .semibold))
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Color.white.opacity(0.18))
+                        .clipShape(Capsule())
+                    }
+                    .padding(.top, 56)
+                    .padding(.leading, 20)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .transition(.opacity)
             }
 
             // Custom Player Controls Overlay
@@ -167,8 +173,19 @@ struct PlayerView: View {
             viewModel.chatId = chatId
             viewModel.chatTitle = chatTitle
             viewModel.videoDuration = duration
+            viewModel.thumbnailFileId = thumbnailFileId
             viewModel.allVideos = allVideos
             viewModel.setup(fileId: fileId, fileSize: fileSize, fileName: fileName, client: client)
+            AppSettings.shared.savePosition(
+                fileId: fileId,
+                fileSize: fileSize,
+                position: AppSettings.shared.playbackPositions[fileId] ?? 0,
+                fileName: fileName,
+                chatId: chatId,
+                chatTitle: chatTitle,
+                duration: duration,
+                thumbnailFileId: thumbnailFileId
+            )
         }
         .onDisappear {
             viewModel.savePosition()
@@ -456,6 +473,7 @@ class PlayerViewModel: ObservableObject {
     var chatId: Int64 = 0
     var chatTitle: String = ""
     var videoDuration: Int = 0
+    var thumbnailFileId: Int? = nil
     var allVideos: [(fileId: Int, fileName: String, fileSize: Int64)] = []
 
     private var previousFileId: Int?
@@ -666,15 +684,16 @@ class PlayerViewModel: ObservableObject {
 
     func savePosition() {
         let currentTime = player.currentTime().seconds
-        guard currentTime.isFinite && currentTime > 0 else { return }
+        let pos = (currentTime.isFinite && currentTime > 0) ? currentTime : (AppSettings.shared.playbackPositions[currentFileId] ?? 0)
         AppSettings.shared.savePosition(
             fileId: currentFileId,
             fileSize: currentFileSize,
-            position: currentTime,
+            position: pos,
             fileName: currentFileName,
             chatId: chatId,
             chatTitle: chatTitle,
-            duration: videoDuration
+            duration: videoDuration,
+            thumbnailFileId: thumbnailFileId
         )
     }
 
