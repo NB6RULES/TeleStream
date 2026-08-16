@@ -57,7 +57,7 @@ class AppSettings: ObservableObject {
         }
     }
 
-    func savePosition(fileId: Int, position: Double, fileName: String, chatId: Int64, chatTitle: String, duration: Int) {
+    func savePosition(fileId: Int, fileSize: Int64 = 0, position: Double, fileName: String, chatId: Int64, chatTitle: String, duration: Int) {
         playbackPositions[fileId] = position
 
         // Update continue watching list
@@ -66,6 +66,7 @@ class AppSettings: ObservableObject {
         if position > 2 && notAtEnd {
             let item = ContinueWatchingItem(
                 fileId: fileId,
+                fileSize: fileSize,
                 fileName: fileName,
                 chatId: chatId,
                 chatTitle: chatTitle,
@@ -93,6 +94,7 @@ class AppSettings: ObservableObject {
 
 struct ContinueWatchingItem: Codable, Identifiable {
     let fileId: Int
+    var fileSize: Int64
     let fileName: String
     let chatId: Int64
     let chatTitle: String
@@ -105,5 +107,32 @@ struct ContinueWatchingItem: Codable, Identifiable {
     var progress: Double {
         guard duration > 0 else { return 0 }
         return position / Double(duration)
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case fileId, fileSize, fileName, chatId, chatTitle, position, duration, lastWatched
+    }
+
+    init(fileId: Int, fileSize: Int64 = 0, fileName: String, chatId: Int64, chatTitle: String, position: Double, duration: Int, lastWatched: Double) {
+        self.fileId = fileId
+        self.fileSize = fileSize
+        self.fileName = fileName
+        self.chatId = chatId
+        self.chatTitle = chatTitle
+        self.position = position
+        self.duration = duration
+        self.lastWatched = lastWatched
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.fileId = try container.decode(Int.self, forKey: .fileId)
+        self.fileSize = try container.decodeIfPresent(Int64.self, forKey: .fileSize) ?? 0
+        self.fileName = try container.decode(String.self, forKey: .fileName)
+        self.chatId = try container.decode(Int64.self, forKey: .chatId)
+        self.chatTitle = try container.decode(String.self, forKey: .chatTitle)
+        self.position = try container.decode(Double.self, forKey: .position)
+        self.duration = try container.decode(Int.self, forKey: .duration)
+        self.lastWatched = try container.decode(Double.self, forKey: .lastWatched)
     }
 }

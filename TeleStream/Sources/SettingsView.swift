@@ -150,7 +150,7 @@ struct SettingsView: View {
                             Text("TeleStream")
                                 .font(.system(size: 17, weight: .semibold))
                                 .foregroundColor(Color(hex: "E3E2E7"))
-                            Text("Version 1.0.0")
+                            Text("Version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.08")")
                                 .font(.system(size: 13))
                                 .foregroundColor(Color(hex: "8B90A0"))
                         }

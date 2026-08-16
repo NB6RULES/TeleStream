@@ -227,7 +227,7 @@ final class TelegramClient: ObservableObject {
         return chats
     }
 
-    private static let videoExtensions: Set<String> = ["mp4", "mkv", "avi", "ts", "mov", "m4v", "wmv", "flv", "webm", "3gp", "m3u8"]
+    private static let videoExtensions: Set<String> = ["mp4", "mkv", "avi", "ts", "mov", "m4v", "wmv", "flv", "webm", "3gp", "m3u8", "vob", "ogv"]
 
     func getVideos(in chatId: Int64) async throws -> [Message] {
         // Fetch actual video messages
@@ -235,7 +235,7 @@ final class TelegramClient: ObservableObject {
             chatId: chatId,
             filter: .searchMessagesFilterVideo,
             fromMessageId: 0,
-            limit: 50,
+            limit: 100,
             offset: 0,
             query: "",
             senderId: nil,
@@ -259,7 +259,7 @@ final class TelegramClient: ObservableObject {
             guard case let .messageDocument(doc) = msg.content else { return false }
             let ext = (doc.document.fileName as NSString).pathExtension.lowercased()
             let mime = doc.document.mimeType.lowercased()
-            return Self.videoExtensions.contains(ext) || mime.hasPrefix("video/")
+            return Self.videoExtensions.contains(ext) || mime.hasPrefix("video/") || mime.contains("matroska") || mime.contains("video")
         }
 
         // Combine and sort by date (newest first)

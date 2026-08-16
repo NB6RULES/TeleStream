@@ -109,7 +109,7 @@ struct ContinueWatchingRow: View {
                         ForEach(settings.continueWatching) { item in
                             NavigationLink(destination: PlayerView(
                                 fileId: item.fileId,
-                                fileSize: 0,
+                                fileSize: item.fileSize,
                                 fileName: item.fileName,
                                 chatId: item.chatId,
                                 chatTitle: item.chatTitle,

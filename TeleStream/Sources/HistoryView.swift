@@ -64,7 +64,7 @@ struct HistoryView: View {
                                     ForEach(filteredItems) { item in
                                         NavigationLink(destination: PlayerView(
                                             fileId: item.fileId,
-                                            fileSize: 0,
+                                            fileSize: item.fileSize,
                                             fileName: item.fileName,
                                             chatId: item.chatId,
                                             chatTitle: item.chatTitle,

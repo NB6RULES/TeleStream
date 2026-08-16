@@ -5,7 +5,7 @@ import TDLibKit
 final class TDResourceLoaderDelegate: NSObject, AVAssetResourceLoaderDelegate {
     private let tdClient: TDLibClient
     private let fileId: Int
-    private let fileSize: Int64
+    private var fileSize: Int64
     private let mimeType: String
     private let broadcaster: FileUpdateBroadcaster
 
@@ -60,23 +60,35 @@ final class TDResourceLoaderDelegate: NSObject, AVAssetResourceLoaderDelegate {
             return
         }
 
+        if self.fileSize <= 0 {
+            if let file = try? await tdClient.getFile(fileId: fileId) {
+                let s = Int64(file.size > 0 ? file.size : file.expectedSize)
+                if s > 0 {
+                    self.fileSize = s
+                }
+            }
+        }
+
+        let effectiveFileSize = self.fileSize > 0 ? self.fileSize : 500_000_000
+
         if let contentRequest = request.contentInformationRequest {
             contentRequest.isByteRangeAccessSupported = true
             let uti: String
-            if mimeType.contains("quicktime") || mimeType.contains("mov") {
+            let lowerMime = mimeType.lowercased()
+            if lowerMime.contains("quicktime") || lowerMime.contains("mov") {
                 uti = AVFileType.mov.rawValue
-            } else if mimeType.contains("m4v") {
+            } else if lowerMime.contains("m4v") {
                 uti = AVFileType.m4v.rawValue
             } else {
                 uti = AVFileType.mp4.rawValue
             }
             contentRequest.contentType = uti
-            contentRequest.contentLength = fileSize
+            contentRequest.contentLength = effectiveFileSize
         }
 
         let requestedOffset = dataRequest.requestedOffset
         let requestedLength = Int64(dataRequest.requestedLength)
-        let end = min(requestedOffset + requestedLength, fileSize)
+        let end = min(requestedOffset + requestedLength, effectiveFileSize)
 
         var currentOffset = requestedOffset
 
