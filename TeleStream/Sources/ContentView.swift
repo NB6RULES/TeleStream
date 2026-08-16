@@ -124,7 +124,8 @@ struct ContinueWatchingRow: View {
                             }) {
                                 ContinueWatchingCard(item: item)
                             }
-                            .buttonStyle(PlainButtonStyle())
+                            .buttonStyle(CardPressButtonStyle())
+                            .contentShape(Rectangle())
                         }
                     }
                     .padding(.horizontal, 16)
@@ -198,25 +199,21 @@ struct ContinueWatchingCard: View {
                 .frame(width: 180, height: 100)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
             }
+            .allowsHitTesting(false)
 
             Text(item.fileName)
-                .font(.system(size: 13))
-                .foregroundColor(Color(hex: "E3E2E7"))
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(.white)
                 .lineLimit(1)
                 .frame(width: 180, alignment: .leading)
 
-            HStack {
-                Text(item.chatTitle)
-                    .font(.system(size: 11))
-                    .foregroundColor(Color(hex: "8B90A0"))
-                    .lineLimit(1)
-                Spacer()
-                Text(lastWatchedText)
-                    .font(.system(size: 10))
-                    .foregroundColor(Color(hex: "8B90A0"))
-            }
-            .frame(width: 180)
+            Text(item.chatTitle)
+                .font(.system(size: 11))
+                .foregroundColor(Color(hex: "8B90A0"))
+                .lineLimit(1)
+                .frame(width: 180, alignment: .leading)
         }
+        .contentShape(Rectangle())
     }
 
     private var timeRemaining: String {

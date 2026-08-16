@@ -516,22 +516,9 @@ class PlayerViewModel: ObservableObject {
         hasPrevious = neighbors.prev != nil
         hasNext = neighbors.next != nil
 
-        let mimeType = mimeTypeFor(fileName: fileName)
-        let delegate = TDResourceLoaderDelegate(
-            fileId: fileId,
-            fileSize: fileSize,
-            mimeType: mimeType,
-            client: client
-        )
-        self.loaderDelegate = delegate
-
-        let ext = URL(fileURLWithPath: fileName).pathExtension.lowercased()
-        let urlExt = (ext == "mov" || ext == "m4v") ? ext : "mp4"
-        let url = URL(string: "tdfile://video/\(fileId).\(urlExt)")!
-        let asset = AVURLAsset(url: url)
-        let queue = DispatchQueue(label: "com.telestream.resourceloader.\(fileId)")
-        asset.resourceLoader.setDelegate(delegate, queue: queue)
-
+        LocalStreamServer.shared.start(with: client)
+        let streamURL = LocalStreamServer.shared.streamURL(fileId: fileId, fileSize: fileSize, fileName: fileName)
+        let asset = AVURLAsset(url: streamURL)
         let playerItem = AVPlayerItem(asset: asset)
 
         statusObserver = playerItem.observe(\.status) { [weak self] item, _ in

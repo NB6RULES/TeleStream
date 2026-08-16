@@ -10,6 +10,9 @@ struct TeleStreamApp: App {
             ContentView()
                 .environmentObject(telegramClient)
                 .environmentObject(appSettings)
+                .onAppear {
+                    LocalStreamServer.shared.start(with: telegramClient)
+                }
         }
     }
 }

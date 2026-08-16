@@ -73,11 +73,14 @@ struct ChatDetailView: View {
                                             DocumentVideoCard(fileName: info.fileName, fileSize: info.fileSize, caption: info.caption, timestamp: message.date, fileId: info.fileId, duration: info.duration, thumbnailFile: info.thumbnailFile)
                                         }
                                     }
-                                    .buttonStyle(PlainButtonStyle())
+                                    .buttonStyle(CardPressButtonStyle())
+                                    .contentShape(Rectangle())
                                 }
                             }
                         }
-                        .padding(16)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 8)
+                        .padding(.bottom, 80)
                     }
                 }
             }
@@ -309,6 +312,7 @@ struct VideoCard: View {
                 }
                 .padding(8)
             }
+            .allowsHitTesting(false)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(video.fileName.isEmpty ? "Video" : video.fileName)
@@ -341,9 +345,11 @@ struct VideoCard: View {
                 }
             }
             .padding(12)
+            .allowsHitTesting(false)
         }
         .background(Color(hex: "1A1B1F"))
         .cornerRadius(12)
+        .contentShape(Rectangle())
     }
 
     @MainActor private var watchProgress: Double? {
@@ -472,6 +478,7 @@ struct DocumentVideoCard: View {
                 }
                 .padding(8)
             }
+            .allowsHitTesting(false)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(fileName)
@@ -495,9 +502,11 @@ struct DocumentVideoCard: View {
                 }
             }
             .padding(12)
+            .allowsHitTesting(false)
         }
         .background(Color(hex: "1A1B1F"))
         .cornerRadius(12)
+        .contentShape(Rectangle())
     }
 
     @MainActor private var watchProgress: Double? {

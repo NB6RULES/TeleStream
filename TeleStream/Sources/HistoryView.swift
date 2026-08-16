@@ -80,11 +80,13 @@ struct HistoryView: View {
                                                 }
                                             }
                                         }
-                                        .buttonStyle(PlainButtonStyle())
+                                        .buttonStyle(CardPressButtonStyle())
+                                        .contentShape(Rectangle())
                                     }
                                 }
                                 .padding(.horizontal, 16)
-                                .padding(.vertical, 8)
+                                .padding(.top, 8)
+                                .padding(.bottom, 80)
                             }
                         }
                     }
@@ -249,6 +251,7 @@ struct HistoryCard: View {
                 .cornerRadius(10)
             }
             .frame(width: 84, height: 60)
+            .allowsHitTesting(false)
 
             // Info
             VStack(alignment: .leading, spacing: 4) {
@@ -274,7 +277,8 @@ struct HistoryCard: View {
                         Image(systemName: "xmark")
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundColor(Color(hex: "8B90A0"))
-                            .padding(4)
+                            .padding(8)
+                            .contentShape(Rectangle())
                     }
                 }
 
@@ -300,6 +304,7 @@ struct HistoryCard: View {
         .padding(12)
         .background(Color(hex: "121317"))
         .cornerRadius(12)
+        .contentShape(Rectangle())
     }
 
     private func formatProgressText(position: Double, duration: Int) -> String {
