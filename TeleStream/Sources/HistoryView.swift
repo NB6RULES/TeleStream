@@ -118,6 +118,7 @@ struct HistoryView: View {
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("This will remove all saved playback progress and watched videos.")
+            }
         }
         .navigationViewStyle(StackNavigationViewStyle())
         .preferredColorScheme(.dark)
