@@ -208,7 +208,7 @@ final class TelegramClient: ObservableObject {
         defer { isProcessingAuth = false }
 
         do {
-            let _ = try await client.registerUser(firstName: firstName, lastName: lastName)
+            let _ = try await client.registerUser(disableNotification: false, firstName: firstName, lastName: lastName)
         } catch {
             authError = "Registration failed: \(error.localizedDescription)"
         }
@@ -217,7 +217,7 @@ final class TelegramClient: ObservableObject {
     func resendCode() async {
         authError = nil
         do {
-            let _ = try await client.resendAuthenticationCode()
+            let _ = try await client.resendAuthenticationCode(reason: nil)
         } catch {
             authError = "Failed to resend code: \(error.localizedDescription)"
         }
