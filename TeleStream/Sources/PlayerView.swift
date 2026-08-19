@@ -867,6 +867,8 @@ class PlayerUIView: UIView {
     var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
 }
 
+import MediaPlayer
+
 struct KSVideoPlayerRepresentable: UIViewRepresentable {
     let url: URL
     let title: String
@@ -885,6 +887,8 @@ struct KSVideoPlayerRepresentable: UIViewRepresentable {
 
         let player = IOSVideoPlayerView()
         player.contentMode = .scaleAspectFit
+        player.toolBar.landscapeButton.isHidden = true
+        player.toolBar.landscapeButton.alpha = 0
         
         let coordinator = context.coordinator
         coordinator.player = player
@@ -910,24 +914,34 @@ struct KSVideoPlayerRepresentable: UIViewRepresentable {
         player.set(resource: resource)
 
         // Pinch gesture to zoom to fill (Netflix / YouTube style)
-        let pinch = UIPinchGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handlePinch(_:)))
+        let pinch = UIPinchGestureRecognizer(target: coordinator, action: #selector(Coordinator.handlePinch(_:)))
+        pinch.delegate = coordinator
         player.addGestureRecognizer(pinch)
 
-        // Double tap to toggle zoom to fill under Dynamic Island
-        let doubleTap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleDoubleTap(_:)))
+        // Double tap to skip 10 seconds (Left = -10s, Right = +10s)
+        let doubleTap = UITapGestureRecognizer(target: coordinator, action: #selector(Coordinator.handleDoubleTap(_:)))
         doubleTap.numberOfTapsRequired = 2
+        doubleTap.delegate = coordinator
         player.addGestureRecognizer(doubleTap)
+
+        // Pan gesture (Left side = Sound, Right side = Brightness)
+        let pan = UIPanGestureRecognizer(target: coordinator, action: #selector(Coordinator.handlePan(_:)))
+        pan.delegate = coordinator
+        player.addGestureRecognizer(pan)
 
         return player
     }
 
-    func updateUIView(_ uiView: IOSVideoPlayerView, context: Context) {}
+    func updateUIView(_ uiView: IOSVideoPlayerView, context: Context) {
+        uiView.toolBar.landscapeButton.isHidden = true
+        uiView.toolBar.landscapeButton.alpha = 0
+    }
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
     }
 
-    class Coordinator: NSObject {
+    class Coordinator: NSObject, UIGestureRecognizerDelegate {
         weak var player: IOSVideoPlayerView?
         var fileId: Int = 0
         var fileSize: Int64 = 0
@@ -941,6 +955,31 @@ struct KSVideoPlayerRepresentable: UIViewRepresentable {
         private var lastTime: Double = 0
         private var lastDuration: Double = 0
         private var isFill = false
+
+        // Pan tracking for Volume (Left) & Brightness (Right)
+        private var panSide: PanSide = .none
+        private var initialVolume: Float = 0
+        private var initialBrightness: CGFloat = 0
+        private var volumeSlider: UISlider?
+        private var hudView: UIView?
+
+        enum PanSide {
+            case none
+            case leftVolume
+            case rightBrightness
+        }
+
+        override init() {
+            super.init()
+            let volumeView = MPVolumeView(frame: CGRect(x: -1000, y: -1000, width: 1, height: 1))
+            volumeView.alpha = 0.0001
+            for sub in volumeView.subviews {
+                if let slider = sub as? UISlider {
+                    self.volumeSlider = slider
+                    break
+                }
+            }
+        }
 
         func handleTimeChange(current: TimeInterval, total: TimeInterval) {
             lastTime = current
@@ -973,6 +1012,148 @@ struct KSVideoPlayerRepresentable: UIViewRepresentable {
             }
         }
 
+        // MARK: - Double Tap to Skip 10s (Left = -10s, Right = +10s)
+        @objc func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
+            guard let player = player else { return }
+            let location = gesture.location(in: player)
+            let isLeft = location.x < player.bounds.width / 2
+
+            let delta: Double = isLeft ? -10.0 : 10.0
+            let target = max(0, min(lastTime + delta, lastDuration > 0 ? lastDuration : lastTime + delta))
+            
+            lastTime = target
+            player.playerLayer?.player.seek(time: target) { _ in }
+            showSkipIndicator(isLeft: isLeft)
+        }
+
+        private func showSkipIndicator(isLeft: Bool) {
+            guard let player = player else { return }
+            let badge = UILabel()
+            badge.text = isLeft ? "◀◀ 10s" : "10s ▶▶"
+            badge.font = UIFont.systemFont(ofSize: 17, weight: .bold)
+            badge.textColor = .white
+            badge.textAlignment = .center
+            badge.backgroundColor = UIColor.black.withAlphaComponent(0.75)
+            badge.layer.cornerRadius = 20
+            badge.clipsToBounds = true
+
+            let width: CGFloat = 110
+            let height: CGFloat = 44
+            let xPos = isLeft ? player.bounds.width * 0.25 - width / 2 : player.bounds.width * 0.75 - width / 2
+            badge.frame = CGRect(x: xPos, y: player.bounds.midY - height / 2, width: width, height: height)
+            badge.alpha = 0
+            badge.transform = CGAffineTransform(scaleX: 0.7, y: 0.7)
+            player.addSubview(badge)
+
+            UIView.animate(withDuration: 0.2, animations: {
+                badge.alpha = 1
+                badge.transform = .identity
+            }) { _ in
+                UIView.animate(withDuration: 0.3, delay: 0.3, options: .curveEaseOut, animations: {
+                    badge.alpha = 0
+                    badge.transform = CGAffineTransform(scaleX: 1.2, y: 1.2)
+                }) { _ in
+                    badge.removeFromSuperview()
+                }
+            }
+        }
+
+        // MARK: - Pan Gesture (Left = Volume, Right = Brightness)
+        @objc func handlePan(_ gesture: UIPanGestureRecognizer) {
+            guard let player = player else { return }
+            let location = gesture.location(in: player)
+            let translation = gesture.translation(in: player)
+
+            switch gesture.state {
+            case .began:
+                if location.x < player.bounds.width / 2 {
+                    panSide = .leftVolume
+                    initialVolume = AVAudioSession.sharedInstance().outputVolume
+                } else {
+                    panSide = .rightBrightness
+                    initialBrightness = UIScreen.main.brightness
+                }
+            case .changed:
+                let delta = -Float(translation.y / (player.bounds.height * 0.6))
+                if panSide == .leftVolume {
+                    let newVol = max(0, min(1.0, initialVolume + delta))
+                    volumeSlider?.value = newVol
+                    showHUD(text: "Volume: \(Int(newVol * 100))%", icon: "speaker.wave.3.fill", isLeft: true)
+                } else if panSide == .rightBrightness {
+                    let newBright = max(0, min(1.0, Float(initialBrightness) + delta))
+                    UIScreen.main.brightness = CGFloat(newBright)
+                    showHUD(text: "Brightness: \(Int(newBright * 100))%", icon: "sun.max.fill", isLeft: false)
+                }
+            case .ended, .cancelled:
+                panSide = .none
+                hideHUD()
+            default:
+                break
+            }
+        }
+
+        private func showHUD(text: String, icon: String, isLeft: Bool) {
+            guard let player = player else { return }
+            if hudView == nil {
+                let container = UIView()
+                container.backgroundColor = UIColor.black.withAlphaComponent(0.75)
+                container.layer.cornerRadius = 14
+                container.clipsToBounds = true
+
+                let iconView = UIImageView()
+                iconView.image = UIImage(systemName: icon)
+                iconView.tintColor = .white
+                iconView.contentMode = .scaleAspectFit
+                iconView.tag = 101
+
+                let label = UILabel()
+                label.font = UIFont.systemFont(ofSize: 14, weight: .semibold)
+                label.textColor = .white
+                label.tag = 102
+
+                let stack = UIStackView(arrangedSubviews: [iconView, label])
+                stack.axis = .horizontal
+                stack.spacing = 8
+                stack.alignment = .center
+                stack.translatesAutoresizingMaskIntoConstraints = false
+                container.addSubview(stack)
+
+                NSLayoutConstraint.activate([
+                    stack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 14),
+                    stack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -14),
+                    stack.topAnchor.constraint(equalTo: container.topAnchor, constant: 10),
+                    stack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -10),
+                    iconView.widthAnchor.constraint(equalToConstant: 20),
+                    iconView.heightAnchor.constraint(equalToConstant: 20)
+                ])
+
+                player.addSubview(container)
+                hudView = container
+            }
+
+            if let container = hudView,
+               let iconView = container.viewWithTag(101) as? UIImageView,
+               let label = container.viewWithTag(102) as? UILabel {
+                iconView.image = UIImage(systemName: icon)
+                label.text = text
+                container.sizeToFit()
+
+                let xPos = isLeft ? 24 : player.bounds.width - container.bounds.width - 24
+                container.frame = CGRect(x: xPos, y: 70, width: container.bounds.width + 28, height: 40)
+                container.alpha = 1.0
+            }
+        }
+
+        private func hideHUD() {
+            UIView.animate(withDuration: 0.3, delay: 0.4, options: .curveEaseOut, animations: {
+                self.hudView?.alpha = 0
+            }) { _ in
+                self.hudView?.removeFromSuperview()
+                self.hudView = nil
+            }
+        }
+
+        // MARK: - Pinch Inward / Outward (Zoom to Fill under Dynamic Island)
         @objc func handlePinch(_ gesture: UIPinchGestureRecognizer) {
             guard gesture.state == .ended, let player = player else { return }
             if gesture.scale > 1.15 && !isFill {
@@ -988,12 +1169,11 @@ struct KSVideoPlayerRepresentable: UIViewRepresentable {
             }
         }
 
-        @objc func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
-            guard let player = player else { return }
-            isFill.toggle()
-            UIView.animate(withDuration: 0.25) {
-                player.contentMode = self.isFill ? .scaleAspectFill : .scaleAspectFit
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+            if gestureRecognizer is UIPinchGestureRecognizer || otherGestureRecognizer is UIPinchGestureRecognizer {
+                return true
             }
+            return false
         }
     }
 }
