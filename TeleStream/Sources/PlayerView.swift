@@ -282,11 +282,10 @@ struct PlayerView: View {
                     .transition(.opacity)
             }
 
-                // Auto-next countdown overlay
-                if viewModel.showAutoNextCountdown {
-                    autoNextOverlay
-                        .transition(.scale.combined(with: .opacity))
-                }
+            // Auto-next countdown overlay
+            if viewModel.showAutoNextCountdown {
+                autoNextOverlay
+                    .transition(.scale.combined(with: .opacity))
             }
         }
         .toolbar(.hidden, for: .tabBar)
