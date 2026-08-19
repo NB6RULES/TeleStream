@@ -961,7 +961,6 @@ struct KSVideoPlayerRepresentable: UIViewRepresentable {
 
 final class KSVideoPlayerContainerView: UIView, UIGestureRecognizerDelegate {
     let player = IOSVideoPlayerView()
-    let gestureOverlay = UIView()
     private let volumeView = MPVolumeView(frame: CGRect(x: -1000, y: -1000, width: 1, height: 1))
     private var volumeSlider: UISlider?
     private var hudView: UIView?
@@ -1031,31 +1030,19 @@ final class KSVideoPlayerContainerView: UIView, UIGestureRecognizerDelegate {
         backgroundColor = .black
         clipsToBounds = true
 
-        // 1. Player View
+        // 1. Player View constrained to safeAreaLayoutGuide so title & back button NEVER hit Dynamic Island
         player.contentMode = .scaleAspectFit
         player.translatesAutoresizingMaskIntoConstraints = false
         addSubview(player)
 
         NSLayoutConstraint.activate([
-            player.topAnchor.constraint(equalTo: topAnchor),
-            player.leadingAnchor.constraint(equalTo: leadingAnchor),
-            player.trailingAnchor.constraint(equalTo: trailingAnchor),
-            player.bottomAnchor.constraint(equalTo: bottomAnchor)
+            player.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor),
+            player.leadingAnchor.constraint(equalTo: safeAreaLayoutGuide.leadingAnchor),
+            player.trailingAnchor.constraint(equalTo: safeAreaLayoutGuide.trailingAnchor),
+            player.bottomAnchor.constraint(equalTo: safeAreaLayoutGuide.bottomAnchor)
         ])
 
-        // 2. Gesture Overlay on top of player
-        gestureOverlay.backgroundColor = .clear
-        gestureOverlay.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(gestureOverlay)
-
-        NSLayoutConstraint.activate([
-            gestureOverlay.topAnchor.constraint(equalTo: topAnchor),
-            gestureOverlay.leadingAnchor.constraint(equalTo: leadingAnchor),
-            gestureOverlay.trailingAnchor.constraint(equalTo: trailingAnchor),
-            gestureOverlay.bottomAnchor.constraint(equalTo: bottomAnchor)
-        ])
-
-        // 3. Volume View for system volume control
+        // 2. Volume View for system volume control
         volumeView.alpha = 0.0001
         volumeView.clipsToBounds = true
         addSubview(volumeView)
@@ -1066,35 +1053,45 @@ final class KSVideoPlayerContainerView: UIView, UIGestureRecognizerDelegate {
             }
         }
 
-        // 4. Gestures on Gesture Overlay
+        // 3. Gestures attached directly to player view
         let pinch = UIPinchGestureRecognizer(target: self, action: #selector(handlePinch(_:)))
         pinch.delegate = self
-        gestureOverlay.addGestureRecognizer(pinch)
+        player.addGestureRecognizer(pinch)
 
         let doubleTap = UITapGestureRecognizer(target: self, action: #selector(handleDoubleTap(_:)))
         doubleTap.numberOfTapsRequired = 2
         doubleTap.delegate = self
-        gestureOverlay.addGestureRecognizer(doubleTap)
-
-        let singleTap = UITapGestureRecognizer(target: self, action: #selector(handleSingleTap(_:)))
-        singleTap.numberOfTapsRequired = 1
-        singleTap.delegate = self
-        singleTap.require(toFail: doubleTap)
-        gestureOverlay.addGestureRecognizer(singleTap)
+        player.addGestureRecognizer(doubleTap)
 
         let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
         pan.delegate = self
-        gestureOverlay.addGestureRecognizer(pan)
+        player.addGestureRecognizer(pan)
+
+        // Disable KSPlayer internal pan gestures so custom Left=Volume, Right=Brightness has 100% priority
+        for g in player.gestureRecognizers ?? [] {
+            if g is UIPanGestureRecognizer && g != pan {
+                g.isEnabled = false
+            }
+            if let tap = g as? UITapGestureRecognizer, tap != doubleTap && tap.numberOfTapsRequired == 1 {
+                tap.require(toFail: doubleTap)
+            }
+        }
+
+        DispatchQueue.main.async { [weak self, weak doubleTap] in
+            guard let self = self, let doubleTap = doubleTap else { return }
+            for g in self.player.gestureRecognizers ?? [] {
+                if g is UIPanGestureRecognizer && g != pan {
+                    g.isEnabled = false
+                }
+                if let tap = g as? UITapGestureRecognizer, tap != doubleTap && tap.numberOfTapsRequired == 1 {
+                    tap.require(toFail: doubleTap)
+                }
+            }
+        }
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        // Position player's navigation bar safely below Dynamic Island / notch and status bar
-        let topPadding = max(safeAreaInsets.top, 28)
-        if player.navigationBar.frame.origin.y < topPadding {
-            player.navigationBar.frame.origin.y = topPadding
-        }
-
         // Remove fullscreen button on the bottom right of toolbar
         for sub in player.toolBar.subviews {
             if let btn = sub as? UIButton, btn.frame.origin.x > player.toolBar.bounds.width * 0.75 {
@@ -1149,17 +1146,9 @@ final class KSVideoPlayerContainerView: UIView, UIGestureRecognizerDelegate {
     }
 
     // MARK: - Gestures
-    @objc private func handleSingleTap(_ gesture: UITapGestureRecognizer) {
-        let isHidden = player.toolBar.alpha < 0.5
-        UIView.animate(withDuration: 0.25) {
-            self.player.toolBar.alpha = isHidden ? 1.0 : 0.0
-            self.player.navigationBar.alpha = isHidden ? 1.0 : 0.0
-        }
-    }
-
     @objc private func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
-        let location = gesture.location(in: gestureOverlay)
-        let isLeft = location.x < gestureOverlay.bounds.width / 2
+        let location = gesture.location(in: player)
+        let isLeft = location.x < player.bounds.width / 2
 
         let delta: Double = isLeft ? -10.0 : 10.0
         let target = max(0, min(lastTime + delta, lastDuration > 0 ? lastDuration : lastTime + delta))
@@ -1170,16 +1159,16 @@ final class KSVideoPlayerContainerView: UIView, UIGestureRecognizerDelegate {
     }
 
     @objc private func handlePan(_ gesture: UIPanGestureRecognizer) {
-        let location = gesture.location(in: gestureOverlay)
-        let translation = gesture.translation(in: gestureOverlay)
-        let velocity = gesture.velocity(in: gestureOverlay)
+        let location = gesture.location(in: player)
+        let translation = gesture.translation(in: player)
+        let velocity = gesture.velocity(in: player)
 
         switch gesture.state {
         case .began:
             if abs(velocity.x) > abs(velocity.y) * 1.2 {
                 panSide = .seekHorizontal
                 initialSeekTime = lastTime
-            } else if location.x < gestureOverlay.bounds.width / 2 {
+            } else if location.x < player.bounds.width / 2 {
                 panSide = .leftVolume
                 initialVolume = AVAudioSession.sharedInstance().outputVolume
                 if volumeSlider == nil {
@@ -1196,7 +1185,7 @@ final class KSVideoPlayerContainerView: UIView, UIGestureRecognizerDelegate {
             }
         case .changed:
             if panSide == .seekHorizontal {
-                let scrubDelta = Double(translation.x / (gestureOverlay.bounds.width * 0.75)) * 90.0 // +/- 90s
+                let scrubDelta = Double(translation.x / (player.bounds.width * 0.75)) * 90.0 // +/- 90s
                 let target = max(0, min(initialSeekTime + scrubDelta, lastDuration > 0 ? lastDuration : initialSeekTime + scrubDelta))
                 lastTime = target
                 player.playerLayer?.player.seek(time: target) { _ in }
@@ -1205,12 +1194,12 @@ final class KSVideoPlayerContainerView: UIView, UIGestureRecognizerDelegate {
                 let diffStr = scrubDelta >= 0 ? "+\(Int(scrubDelta))s" : "\(Int(scrubDelta))s"
                 showHUD(text: "\(currentStr) / \(totalStr) (\(diffStr))", icon: scrubDelta >= 0 ? "goforward.10" : "gobackward.10", isLeft: false)
             } else if panSide == .leftVolume {
-                let delta = -Float(translation.y / (gestureOverlay.bounds.height * 0.55))
+                let delta = -Float(translation.y / (player.bounds.height * 0.55))
                 let newVol = max(0, min(1.0, initialVolume + delta))
                 volumeSlider?.value = newVol
                 showHUD(text: "Volume: \(Int(newVol * 100))%", icon: "speaker.wave.3.fill", isLeft: true)
             } else if panSide == .rightBrightness {
-                let delta = -Float(translation.y / (gestureOverlay.bounds.height * 0.55))
+                let delta = -Float(translation.y / (player.bounds.height * 0.55))
                 let newBright = max(0, min(1.0, Float(initialBrightness) + delta))
                 UIScreen.main.brightness = CGFloat(newBright)
                 showHUD(text: "Brightness: \(Int(newBright * 100))%", icon: "sun.max.fill", isLeft: false)
@@ -1300,9 +1289,9 @@ final class KSVideoPlayerContainerView: UIView, UIGestureRecognizerDelegate {
 
     // Fixed-frame HUD pill that stays strictly anchored without drifting
     private func showHUD(text: String, icon: String, isLeft: Bool) {
-        let hudWidth: CGFloat = 210
+        let hudWidth: CGFloat = 220
         let hudHeight: CGFloat = 40
-        let topOffset = max(safeAreaInsets.top + 8, 36)
+        let topOffset: CGFloat = 16
         let xPos = isLeft ? 24 : bounds.width - hudWidth - 24
 
         if hudView == nil {
@@ -1349,30 +1338,22 @@ final class KSVideoPlayerContainerView: UIView, UIGestureRecognizerDelegate {
         }
     }
 
-    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
-        return false
+    // Pass touches through to player buttons, subtitle picker, audio track picker, and scrubber
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        if let touchedView = touch.view {
+            if touchedView is UIButton || touchedView is UISlider || touchedView is UIControl ||
+               touchedView.superview is UIButton || touchedView.superview is UISlider ||
+               touchedView.isDescendant(of: player.toolBar) || touchedView.isDescendant(of: player.navigationBar) {
+                if gestureRecognizer is UIPanGestureRecognizer || gestureRecognizer is UITapGestureRecognizer {
+                    return false
+                }
+            }
+        }
+        return true
     }
 
-    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        // Let touches on player navigationBar pass through when visible
-        if player.navigationBar.alpha > 0.5 {
-            let navPoint = convert(point, to: player.navigationBar)
-            if player.navigationBar.bounds.contains(navPoint) {
-                if let hit = player.navigationBar.hitTest(navPoint, with: event) {
-                    return hit
-                }
-            }
-        }
-        // Let touches on player toolBar (scrubber slider, play button, time) pass through when visible
-        if player.toolBar.alpha > 0.5 {
-            let toolPoint = convert(point, to: player.toolBar)
-            if player.toolBar.bounds.contains(toolPoint) {
-                if let hit = player.toolBar.hitTest(toolPoint, with: event) {
-                    return hit
-                }
-            }
-        }
-        return gestureOverlay
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        return false
     }
 }
 
