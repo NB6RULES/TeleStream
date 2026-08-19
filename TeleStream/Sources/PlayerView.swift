@@ -3,6 +3,7 @@ import AVKit
 import AVFoundation
 import UIKit
 import Combine
+import KSPlayer
 
 struct ActivePlayerItem: Identifiable, Equatable {
     var id: Int { fileId }
@@ -34,16 +35,34 @@ struct PlayerView: View {
     @StateObject private var viewModel = PlayerViewModel()
     @Environment(\.dismiss) var dismiss
 
+    private var isMKV: Bool {
+        let ext = (fileName as NSString).pathExtension.lowercased()
+        return ext == "mkv" || ext == "avi" || ext == "webm" || ext == "flv" || ext == "wmv" || ext == "vob" || ext == "mpg" || ext == "mpeg"
+    }
+
+    private var streamURL: URL {
+        LocalStreamServer.shared.start(with: client)
+        return LocalStreamServer.shared.streamURL(fileId: fileId, fileSize: fileSize, fileName: fileName)
+    }
+
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            // Video rendering layer
-            CustomVideoPlayerView(player: viewModel.player, videoGravity: viewModel.videoGravity)
+            if isMKV {
+                KSVideoPlayerRepresentable(
+                    url: streamURL,
+                    title: fileName,
+                    onDismiss: { dismiss() }
+                )
                 .ignoresSafeArea()
-                .onTapGesture {
-                    viewModel.toggleControlsVisibility()
-                }
+            } else {
+                // Video rendering layer
+                CustomVideoPlayerView(player: viewModel.player, videoGravity: viewModel.videoGravity)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        viewModel.toggleControlsVisibility()
+                    }
 
             // Unified Centered Buffering Indicator
             if viewModel.isLoading && viewModel.error == nil {
@@ -146,38 +165,11 @@ struct PlayerView: View {
                     .transition(.opacity)
             }
 
-            // Auto-next countdown overlay
-            if viewModel.showAutoNextCountdown {
-                VStack(spacing: 12) {
-                    Text("Next episode in \(viewModel.autoNextSeconds)s")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(.white)
-                    HStack(spacing: 16) {
-                        Button("Play Now") {
-                            viewModel.playNext()
-                        }
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 10)
-                        .background(Color(hex: "007AFF"))
-                        .cornerRadius(20)
-
-                        Button("Cancel") {
-                            viewModel.cancelAutoNext()
-                        }
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundColor(.white.opacity(0.7))
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 10)
-                        .background(Color.white.opacity(0.15))
-                        .cornerRadius(20)
-                    }
+                // Auto-next countdown overlay
+                if viewModel.showAutoNextCountdown {
+                    autoNextOverlay
+                        .transition(.scale.combined(with: .opacity))
                 }
-                .padding(24)
-                .background(Color.black.opacity(0.85))
-                .cornerRadius(16)
-                .padding(.bottom, 100)
             }
         }
         .toolbar(.hidden, for: .tabBar)
@@ -191,7 +183,9 @@ struct PlayerView: View {
             viewModel.videoDuration = duration
             viewModel.thumbnailFileId = thumbnailFileId
             viewModel.allVideos = allVideos
-            viewModel.setup(fileId: fileId, fileSize: fileSize, fileName: fileName, client: client)
+            if !isMKV {
+                viewModel.setup(fileId: fileId, fileSize: fileSize, fileName: fileName, client: client)
+            }
             AppSettings.shared.savePosition(
                 fileId: fileId,
                 fileSize: fileSize,
@@ -204,8 +198,10 @@ struct PlayerView: View {
             )
         }
         .onDisappear {
-            viewModel.savePosition()
-            viewModel.teardown()
+            if !isMKV {
+                viewModel.savePosition()
+                viewModel.teardown()
+            }
         }
     }
 
@@ -433,6 +429,39 @@ struct PlayerView: View {
                 .padding(.bottom, 24)
             }
         }
+    }
+
+    private var autoNextOverlay: some View {
+        VStack(spacing: 12) {
+            Text("Next episode in \(viewModel.autoNextSeconds)s")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundColor(.white)
+            HStack(spacing: 16) {
+                Button("Play Now") {
+                    viewModel.playNext()
+                }
+                .font(.system(size: 15, weight: .medium))
+                .foregroundColor(.white)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 10)
+                .background(Color(hex: "007AFF"))
+                .cornerRadius(20)
+
+                Button("Cancel") {
+                    viewModel.cancelAutoNext()
+                }
+                .font(.system(size: 15, weight: .medium))
+                .foregroundColor(.white.opacity(0.7))
+                .padding(.horizontal, 20)
+                .padding(.vertical, 10)
+                .background(Color.white.opacity(0.15))
+                .cornerRadius(20)
+            }
+        }
+        .padding(24)
+        .background(Color.black.opacity(0.85))
+        .cornerRadius(16)
+        .padding(.bottom, 100)
     }
 
     private func formatRate(_ rate: Float) -> String {
@@ -829,4 +858,27 @@ class PlayerUIView: UIView {
     override class var layerClass: AnyClass { AVPlayerLayer.self }
     var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
 }
+
+struct KSVideoPlayerRepresentable: UIViewRepresentable {
+    let url: URL
+    let title: String
+    var onDismiss: () -> Void
+
+    func makeUIView(context: Context) -> IOSVideoPlayerView {
+        KSOptions.firstPlayerType = KSMEPlayer.self
+        KSOptions.secondPlayerType = KSMEPlayer.self
+        KSOptions.canBackgroundPlay = true
+
+        let player = IOSVideoPlayerView()
+        player.backBlock = {
+            onDismiss()
+        }
+        let resource = KSPlayerResource(url: url, options: KSOptions(), name: title)
+        player.set(resource: resource)
+        return player
+    }
+
+    func updateUIView(_ uiView: IOSVideoPlayerView, context: Context) {}
+}
+
 
