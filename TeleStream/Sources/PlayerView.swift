@@ -861,42 +861,17 @@ class PlayerUIView: UIView {
     var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
 }
 
-final class CustomKSPlayerView: IOSVideoPlayerView {
-    override func updateUI(isLandscape: Bool) {
-        super.updateUI(isLandscape: isLandscape)
-        toolBar.playbackRateButton.isHidden = false
-        toolBar.playbackRateButton.alpha = 1.0
-    }
-
-    override func onButtonPressed(type: PlayerButtonType, button: UIButton) {
-        if type == .landscape {
-            // Toggle aspect ratio (Fit vs Zoom to Fill entire display under Dynamic Island)
-            UIView.animate(withDuration: 0.25) {
-                if self.contentMode == .scaleAspectFill {
-                    self.contentMode = .scaleAspectFit
-                } else {
-                    self.contentMode = .scaleAspectFill
-                }
-            }
-        } else {
-            super.onButtonPressed(type: type, button: button)
-        }
-    }
-}
-
 struct KSVideoPlayerRepresentable: UIViewRepresentable {
     let url: URL
     let title: String
     var onDismiss: () -> Void
 
-    func makeUIView(context: Context) -> CustomKSPlayerView {
+    func makeUIView(context: Context) -> IOSVideoPlayerView {
         KSOptions.firstPlayerType = KSMEPlayer.self
         KSOptions.secondPlayerType = KSMEPlayer.self
         KSOptions.canBackgroundPlay = true
 
-        let player = CustomKSPlayerView()
-        player.backgroundColor = .black
-        player.contentMode = .scaleAspectFit
+        let player = IOSVideoPlayerView()
         player.backBlock = {
             onDismiss()
         }
@@ -905,7 +880,7 @@ struct KSVideoPlayerRepresentable: UIViewRepresentable {
         return player
     }
 
-    func updateUIView(_ uiView: CustomKSPlayerView, context: Context) {}
+    func updateUIView(_ uiView: IOSVideoPlayerView, context: Context) {}
 }
 
 
