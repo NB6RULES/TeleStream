@@ -10,6 +10,9 @@ struct LoginView: View {
     @State private var password = ""
     @State private var firstName = ""
     @State private var lastName = ""
+    @State private var resendCooldown = 0
+    @State private var isResending = false
+    @State private var showResendSuccess = false
 
     var body: some View {
         ZStack {
@@ -367,30 +370,72 @@ struct LoginView: View {
             .disabled(verificationCode.trimmingCharacters(in: .whitespaces).isEmpty || client.isProcessingAuth)
             .padding(.horizontal, 24)
 
+            if showResendSuccess {
+                Text("Verification code resent! Check your Telegram app.")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(Color(hex: "ADC6FF"))
+                    .multilineTextAlignment(.center)
+                    .transition(.opacity)
+            }
+
             HStack(spacing: 20) {
                 Button(action: {
-                    Task { await client.resendCode() }
+                    Task {
+                        isResending = true
+                        showResendSuccess = false
+                        await client.resendCode()
+                        isResending = false
+                        if client.authError == nil {
+                            showResendSuccess = true
+                            resendCooldown = 60
+                        }
+                    }
                 }) {
-                    Text("Resend Code")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(Color(hex: "ADC6FF"))
+                    HStack(spacing: 6) {
+                        if isResending {
+                            ProgressView()
+                                .tint(Color(hex: "ADC6FF"))
+                                .scaleEffect(0.8)
+                        }
+                        if resendCooldown > 0 {
+                            Text("Resend Code (\(resendCooldown)s)")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(Color(hex: "8B90A0"))
+                        } else {
+                            Text("Resend Code")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(Color(hex: "ADC6FF"))
+                        }
+                    }
                 }
+                .disabled(resendCooldown > 0 || isResending)
 
                 Text("•")
                     .foregroundColor(Color(hex: "8B90A0"))
 
                 Button(action: {
                     verificationCode = ""
+                    showResendSuccess = false
+                    resendCooldown = 0
                     client.resetToPhoneAuth()
                 }) {
-                    Text("Change Number")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(Color(hex: "8B90A0"))
+                    HStack(spacing: 4) {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 12))
+                        Text("Change Number")
+                    }
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(Color(hex: "ADC6FF"))
                 }
             }
             .padding(.top, 8)
         }
         .padding(.horizontal, 20)
+        .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
+            if resendCooldown > 0 {
+                resendCooldown -= 1
+            }
+        }
     }
 
     // MARK: - 2FA Password View

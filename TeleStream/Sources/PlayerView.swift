@@ -176,6 +176,8 @@ struct PlayerView: View {
         .toolbar(.hidden, for: .navigationBar)
         .navigationBarHidden(true)
         .navigationBarBackButtonHidden(true)
+        .statusBarHidden(true)
+        .persistentSystemOverlays(.hidden)
         .preferredColorScheme(.dark)
         .onAppear {
             viewModel.chatId = chatId
@@ -864,21 +866,35 @@ struct KSVideoPlayerRepresentable: UIViewRepresentable {
     let title: String
     var onDismiss: () -> Void
 
-    func makeUIView(context: Context) -> IOSVideoPlayerView {
+    func makeUIView(context: Context) -> UIView {
+        let container = UIView()
+        container.backgroundColor = .black
+
         KSOptions.firstPlayerType = KSMEPlayer.self
         KSOptions.secondPlayerType = KSMEPlayer.self
         KSOptions.canBackgroundPlay = true
 
         let player = IOSVideoPlayerView()
+        player.backgroundColor = .black
         player.backBlock = {
             onDismiss()
         }
         let resource = KSPlayerResource(url: url, options: KSOptions(), name: title)
         player.set(resource: resource)
-        return player
+
+        container.addSubview(player)
+        player.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            player.topAnchor.constraint(equalTo: container.safeAreaLayoutGuide.topAnchor),
+            player.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            player.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            player.bottomAnchor.constraint(equalTo: container.bottomAnchor)
+        ])
+
+        return container
     }
 
-    func updateUIView(_ uiView: IOSVideoPlayerView, context: Context) {}
+    func updateUIView(_ uiView: UIView, context: Context) {}
 }
 
 

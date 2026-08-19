@@ -109,11 +109,9 @@ final class TelegramClient: ObservableObject {
     // MARK: - Auth Methods
 
     func resetToPhoneAuth() {
-        if case .authorizationStateWaitOtherDeviceConfirmation = authState {
-            qrCodeUrl = nil
-            authError = nil
-            reinitClient()
-        }
+        qrCodeUrl = nil
+        authError = nil
+        reinitClient()
     }
 
     func startQRAuth() async {
@@ -236,10 +234,19 @@ final class TelegramClient: ObservableObject {
 
     func resendCode() async {
         authError = nil
+        isProcessingAuth = true
+        defer { isProcessingAuth = false }
         do {
             let _ = try await client.resendAuthenticationCode(reason: nil)
         } catch {
-            authError = "Failed to resend code: \(error.localizedDescription)"
+            let errStr = error.localizedDescription
+            if errStr.contains("FLOOD_WAIT") {
+                authError = "Please wait a few moments before requesting another code."
+            } else if errStr.contains("AUTH_KEY_UNREGISTERED") {
+                authError = "Session expired. Please re-enter your phone number."
+            } else {
+                authError = "Failed to resend code: \(errStr)"
+            }
         }
     }
 
