@@ -948,7 +948,7 @@ struct KSVideoPlayerRepresentable: UIViewRepresentable {
 
             if !hasSeekedToSavedPos && savedPos > 3 && (total == 0 || savedPos < total - 5) {
                 hasSeekedToSavedPos = true
-                player?.playerLayer?.player?.seek(time: savedPos) { _ in }
+                player?.playerLayer?.player.seek(time: savedPos) { _ in }
             }
 
             // Periodic auto-save every 5 seconds
