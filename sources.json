@@ -10,15 +10,22 @@
       "name": "TeleStream",
       "bundleIdentifier": "com.telestream.TeleStream",
       "developerName": "NB6RULES",
-      "version": "1.28",
-      "versionDate": "2026-08-19T19:36:33Z",
+      "version": "1.29",
+      "versionDate": "2026-08-19T19:54:19Z",
       "versionDescription": "Real-time LiveContainer & SideStore/AltStore source release with phone login state machine and QR auth fixes.",
       "downloadURL": "https://github.com/NB6RULES/TeleStream/releases/latest/download/TeleStream.ipa",
       "iconURL": "https://raw.githubusercontent.com/NB6RULES/TeleStream/main/TeleStream/Sources/Assets.xcassets/TeleStreamLogo.imageset/logo.png",
       "localizedDescription": "TeleStream is a fast and native iOS streaming player powered by TDLibKit to stream and play media from your Telegram chats, channels, and cloud storage.",
       "tintColor": "#0088CC",
-      "size": 50475374,
+      "size": 50484631,
       "versions": [
+        {
+          "version": "1.29",
+          "date": "2026-08-19T19:54:19Z",
+          "size": 50484631,
+          "downloadURL": "https://github.com/NB6RULES/TeleStream/releases/download/v1.29/TeleStream.ipa",
+          "localizedDescription": "TeleStream v1.29 automated build."
+        },
         {
           "version": "1.28",
           "date": "2026-08-19T19:36:33Z",
@@ -81,13 +88,6 @@
           "size": 50417029,
           "downloadURL": "https://github.com/NB6RULES/TeleStream/releases/download/v1.18/TeleStream.ipa",
           "localizedDescription": "TeleStream v1.18 automated build."
-        },
-        {
-          "version": "1.17",
-          "date": "2026-08-16T18:19:06Z",
-          "size": 50387989,
-          "downloadURL": "https://github.com/NB6RULES/TeleStream/releases/download/v1.17/TeleStream.ipa",
-          "localizedDescription": "TeleStream v1.17 automated build."
         }
       ],
       "appPermissions": {
