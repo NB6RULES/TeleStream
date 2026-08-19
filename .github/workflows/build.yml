@@ -93,6 +93,7 @@ jobs:
         2. Use LiveContainer, AltStore, or SideStore to install
         3. Open the app and log in with QR code or phone number"
 
+        gh release delete "$VERSION_TAG" --yes 2>/dev/null || true
         gh release create "$VERSION_TAG" TeleStream.ipa \
           --title "TeleStream v${VERSION}" \
           --notes "$NOTES" \

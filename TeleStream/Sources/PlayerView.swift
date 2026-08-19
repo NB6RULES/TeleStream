@@ -872,15 +872,59 @@ struct KSVideoPlayerRepresentable: UIViewRepresentable {
         KSOptions.canBackgroundPlay = true
 
         let player = IOSVideoPlayerView()
+        player.contentMode = .scaleAspectFit
         player.backBlock = {
             onDismiss()
         }
         let resource = KSPlayerResource(url: url, options: KSOptions(), name: title)
         player.set(resource: resource)
+
+        // Pinch gesture to zoom to fill (Netflix / YouTube style)
+        let pinch = UIPinchGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handlePinch(_:)))
+        player.addGestureRecognizer(pinch)
+
+        // Double tap to toggle zoom to fill under Dynamic Island
+        let doubleTap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleDoubleTap(_:)))
+        doubleTap.numberOfTapsRequired = 2
+        player.addGestureRecognizer(doubleTap)
+
+        context.coordinator.player = player
         return player
     }
 
     func updateUIView(_ uiView: IOSVideoPlayerView, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    class Coordinator: NSObject {
+        weak var player: IOSVideoPlayerView?
+        private var isFill = false
+
+        @objc func handlePinch(_ gesture: UIPinchGestureRecognizer) {
+            guard gesture.state == .ended, let player = player else { return }
+            if gesture.scale > 1.15 && !isFill {
+                isFill = true
+                UIView.animate(withDuration: 0.25) {
+                    player.contentMode = .scaleAspectFill
+                }
+            } else if gesture.scale < 0.85 && isFill {
+                isFill = false
+                UIView.animate(withDuration: 0.25) {
+                    player.contentMode = .scaleAspectFit
+                }
+            }
+        }
+
+        @objc func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
+            guard let player = player else { return }
+            isFill.toggle()
+            UIView.animate(withDuration: 0.25) {
+                player.contentMode = self.isFill ? .scaleAspectFill : .scaleAspectFit
+            }
+        }
+    }
 }
 
 
