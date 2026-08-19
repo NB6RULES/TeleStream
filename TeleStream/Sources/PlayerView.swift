@@ -887,8 +887,6 @@ struct KSVideoPlayerRepresentable: UIViewRepresentable {
 
         let player = IOSVideoPlayerView()
         player.contentMode = .scaleAspectFit
-        player.toolBar.landscapeButton.isHidden = true
-        player.toolBar.landscapeButton.alpha = 0
         
         let coordinator = context.coordinator
         coordinator.player = player
@@ -932,10 +930,7 @@ struct KSVideoPlayerRepresentable: UIViewRepresentable {
         return player
     }
 
-    func updateUIView(_ uiView: IOSVideoPlayerView, context: Context) {
-        uiView.toolBar.landscapeButton.isHidden = true
-        uiView.toolBar.landscapeButton.alpha = 0
-    }
+    func updateUIView(_ uiView: IOSVideoPlayerView, context: Context) {}
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
