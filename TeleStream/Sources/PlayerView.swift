@@ -979,16 +979,42 @@ final class KSVideoPlayerContainerView: UIView, UIGestureRecognizerDelegate {
     private var hasSeekedToSavedPos = false
     private var lastTime: Double = 0
     private var lastDuration: Double = 0
-    private var isFill = false
 
+    // 3 Aspect Ratio Options
+    enum AspectMode: Int, CaseIterable {
+        case fit = 0        // Avoid Dynamic Island / Original Aspect Ratio
+        case fitWidth = 1   // Fit to Width (100% display width under Dynamic Island)
+        case fitHeight = 2  // Fit to Height
+
+        var title: String {
+            switch self {
+            case .fit: return "Original (Avoid Dynamic Island)"
+            case .fitWidth: return "Fit to Width (Fill Dynamic Island)"
+            case .fitHeight: return "Fit to Height"
+            }
+        }
+
+        var scale: CGFloat {
+            switch self {
+            case .fit: return 1.0
+            case .fitWidth: return 1.28
+            case .fitHeight: return 1.14
+            }
+        }
+    }
+    private var currentAspectMode: AspectMode = .fit
+
+    // Pan tracking for Volume (Left), Brightness (Right), and Horizontal Seeking
     private var panSide: PanSide = .none
     private var initialVolume: Float = 0
     private var initialBrightness: CGFloat = 0
+    private var initialSeekTime: Double = 0
 
     enum PanSide {
         case none
         case leftVolume
         case rightBrightness
+        case seekHorizontal
     }
 
     override init(frame: CGRect) {
@@ -1061,6 +1087,23 @@ final class KSVideoPlayerContainerView: UIView, UIGestureRecognizerDelegate {
         gestureOverlay.addGestureRecognizer(pan)
     }
 
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        // Position player's navigation bar safely below Dynamic Island / notch and status bar
+        let topPadding = max(safeAreaInsets.top, 28)
+        if player.navigationBar.frame.origin.y < topPadding {
+            player.navigationBar.frame.origin.y = topPadding
+        }
+
+        // Remove fullscreen button on the bottom right of toolbar
+        for sub in player.toolBar.subviews {
+            if let btn = sub as? UIButton, btn.frame.origin.x > player.toolBar.bounds.width * 0.75 {
+                btn.isHidden = true
+                btn.alpha = 0
+            }
+        }
+    }
+
     func configure(url: URL, title: String) {
         player.backBlock = { [weak self] in
             self?.savePosition()
@@ -1129,10 +1172,14 @@ final class KSVideoPlayerContainerView: UIView, UIGestureRecognizerDelegate {
     @objc private func handlePan(_ gesture: UIPanGestureRecognizer) {
         let location = gesture.location(in: gestureOverlay)
         let translation = gesture.translation(in: gestureOverlay)
+        let velocity = gesture.velocity(in: gestureOverlay)
 
         switch gesture.state {
         case .began:
-            if location.x < gestureOverlay.bounds.width / 2 {
+            if abs(velocity.x) > abs(velocity.y) * 1.2 {
+                panSide = .seekHorizontal
+                initialSeekTime = lastTime
+            } else if location.x < gestureOverlay.bounds.width / 2 {
                 panSide = .leftVolume
                 initialVolume = AVAudioSession.sharedInstance().outputVolume
                 if volumeSlider == nil {
@@ -1148,12 +1195,22 @@ final class KSVideoPlayerContainerView: UIView, UIGestureRecognizerDelegate {
                 initialBrightness = UIScreen.main.brightness
             }
         case .changed:
-            let delta = -Float(translation.y / (gestureOverlay.bounds.height * 0.55))
-            if panSide == .leftVolume {
+            if panSide == .seekHorizontal {
+                let scrubDelta = Double(translation.x / (gestureOverlay.bounds.width * 0.75)) * 90.0 // +/- 90s
+                let target = max(0, min(initialSeekTime + scrubDelta, lastDuration > 0 ? lastDuration : initialSeekTime + scrubDelta))
+                lastTime = target
+                player.playerLayer?.player.seek(time: target) { _ in }
+                let currentStr = formatDuration(Int(target))
+                let totalStr = formatDuration(Int(lastDuration))
+                let diffStr = scrubDelta >= 0 ? "+\(Int(scrubDelta))s" : "\(Int(scrubDelta))s"
+                showHUD(text: "\(currentStr) / \(totalStr) (\(diffStr))", icon: scrubDelta >= 0 ? "goforward.10" : "gobackward.10", isLeft: false)
+            } else if panSide == .leftVolume {
+                let delta = -Float(translation.y / (gestureOverlay.bounds.height * 0.55))
                 let newVol = max(0, min(1.0, initialVolume + delta))
                 volumeSlider?.value = newVol
                 showHUD(text: "Volume: \(Int(newVol * 100))%", icon: "speaker.wave.3.fill", isLeft: true)
             } else if panSide == .rightBrightness {
+                let delta = -Float(translation.y / (gestureOverlay.bounds.height * 0.55))
                 let newBright = max(0, min(1.0, Float(initialBrightness) + delta))
                 UIScreen.main.brightness = CGFloat(newBright)
                 showHUD(text: "Brightness: \(Int(newBright * 100))%", icon: "sun.max.fill", isLeft: false)
@@ -1166,19 +1223,46 @@ final class KSVideoPlayerContainerView: UIView, UIGestureRecognizerDelegate {
         }
     }
 
+    // MARK: - 3 Options Pinch Gesture (Avoid Dynamic Island, Fit to Width, Fit to Height)
     @objc private func handlePinch(_ gesture: UIPinchGestureRecognizer) {
-        if gesture.state == .ended {
-            if gesture.scale > 1.15 && !isFill {
-                isFill = true
-                UIView.animate(withDuration: 0.3) {
-                    self.player.transform = CGAffineTransform(scaleX: 1.28, y: 1.28)
-                }
-            } else if gesture.scale < 0.85 && isFill {
-                isFill = false
-                UIView.animate(withDuration: 0.3) {
-                    self.player.transform = .identity
-                }
+        guard gesture.state == .ended else { return }
+        if gesture.scale > 1.15 {
+            switch currentAspectMode {
+            case .fit: currentAspectMode = .fitWidth
+            case .fitWidth: currentAspectMode = .fitHeight
+            case .fitHeight: currentAspectMode = .fit
             }
+        } else if gesture.scale < 0.85 {
+            switch currentAspectMode {
+            case .fit: currentAspectMode = .fitHeight
+            case .fitHeight: currentAspectMode = .fitWidth
+            case .fitWidth: currentAspectMode = .fit
+            }
+        }
+        applyAspectMode(currentAspectMode)
+    }
+
+    private func applyAspectMode(_ mode: AspectMode) {
+        UIView.animate(withDuration: 0.3) {
+            // Apply scale only to the video rendering subview, NOT player.toolBar or player.navigationBar
+            if let videoView = self.player.subviews.first {
+                videoView.transform = mode == .fit ? .identity : CGAffineTransform(scaleX: mode.scale, y: mode.scale)
+            }
+        }
+        showHUD(text: mode.title, icon: "aspectratio", isLeft: false)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+            self?.hideHUD()
+        }
+    }
+
+    private func formatDuration(_ seconds: Int) -> String {
+        let h = seconds / 3600
+        let m = (seconds % 3600) / 60
+        let s = seconds % 60
+        if h > 0 {
+            return String(format: "%d:%02d:%02d", h, m, s)
+        } else {
+            return String(format: "%02d:%02d", m, s)
         }
     }
 
@@ -1214,39 +1298,32 @@ final class KSVideoPlayerContainerView: UIView, UIGestureRecognizerDelegate {
         }
     }
 
+    // Fixed-frame HUD pill that stays strictly anchored without drifting
     private func showHUD(text: String, icon: String, isLeft: Bool) {
+        let hudWidth: CGFloat = 210
+        let hudHeight: CGFloat = 40
+        let topOffset = max(safeAreaInsets.top + 8, 36)
+        let xPos = isLeft ? 24 : bounds.width - hudWidth - 24
+
         if hudView == nil {
-            let container = UIView()
-            container.backgroundColor = UIColor.black.withAlphaComponent(0.75)
+            let container = UIView(frame: CGRect(x: xPos, y: topOffset, width: hudWidth, height: hudHeight))
+            container.backgroundColor = UIColor.black.withAlphaComponent(0.8)
             container.layer.cornerRadius = 14
             container.clipsToBounds = true
 
-            let iconView = UIImageView()
+            let iconView = UIImageView(frame: CGRect(x: 12, y: 10, width: 20, height: 20))
             iconView.image = UIImage(systemName: icon)
             iconView.tintColor = .white
             iconView.contentMode = .scaleAspectFit
             iconView.tag = 101
+            container.addSubview(iconView)
 
-            let label = UILabel()
-            label.font = UIFont.systemFont(ofSize: 14, weight: .semibold)
+            let label = UILabel(frame: CGRect(x: 38, y: 0, width: hudWidth - 46, height: hudHeight))
+            label.font = UIFont.systemFont(ofSize: 12, weight: .semibold)
             label.textColor = .white
+            label.textAlignment = .left
             label.tag = 102
-
-            let stack = UIStackView(arrangedSubviews: [iconView, label])
-            stack.axis = .horizontal
-            stack.spacing = 8
-            stack.alignment = .center
-            stack.translatesAutoresizingMaskIntoConstraints = false
-            container.addSubview(stack)
-
-            NSLayoutConstraint.activate([
-                stack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 14),
-                stack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -14),
-                stack.topAnchor.constraint(equalTo: container.topAnchor, constant: 10),
-                stack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -10),
-                iconView.widthAnchor.constraint(equalToConstant: 20),
-                iconView.heightAnchor.constraint(equalToConstant: 20)
-            ])
+            container.addSubview(label)
 
             addSubview(container)
             hudView = container
@@ -1256,12 +1333,9 @@ final class KSVideoPlayerContainerView: UIView, UIGestureRecognizerDelegate {
            let iconView = container.viewWithTag(101) as? UIImageView,
            let label = container.viewWithTag(102) as? UILabel {
             bringSubviewToFront(container)
+            container.frame = CGRect(x: xPos, y: topOffset, width: hudWidth, height: hudHeight)
             iconView.image = UIImage(systemName: icon)
             label.text = text
-            container.sizeToFit()
-
-            let xPos = isLeft ? 24 : bounds.width - container.bounds.width - 24
-            container.frame = CGRect(x: xPos, y: 70, width: container.bounds.width + 28, height: 40)
             container.alpha = 1.0
         }
     }
@@ -1280,18 +1354,20 @@ final class KSVideoPlayerContainerView: UIView, UIGestureRecognizerDelegate {
     }
 
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        // Let touches on player navigationBar pass through when visible
         if player.navigationBar.alpha > 0.5 {
             let navPoint = convert(point, to: player.navigationBar)
-            if player.navigationBar.point(inside: navPoint, with: event) {
-                if let hit = player.navigationBar.hitTest(navPoint, with: event), hit is UIButton || hit is UISlider {
+            if player.navigationBar.bounds.contains(navPoint) {
+                if let hit = player.navigationBar.hitTest(navPoint, with: event) {
                     return hit
                 }
             }
         }
+        // Let touches on player toolBar (scrubber slider, play button, time) pass through when visible
         if player.toolBar.alpha > 0.5 {
             let toolPoint = convert(point, to: player.toolBar)
-            if player.toolBar.point(inside: toolPoint, with: event) {
-                if let hit = player.toolBar.hitTest(toolPoint, with: event), hit is UIButton || hit is UISlider {
+            if player.toolBar.bounds.contains(toolPoint) {
+                if let hit = player.toolBar.hitTest(toolPoint, with: event) {
                     return hit
                 }
             }
