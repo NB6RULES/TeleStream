@@ -6,7 +6,7 @@ final class LocalStreamServer: @unchecked Sendable {
     static let shared = LocalStreamServer()
 
     private var listener: NWListener?
-    private(set) var port: UInt16 = 0
+    private(set) var port: UInt16 = 9123
     private var tdClient: TDLibClient?
     private var broadcaster: FileUpdateBroadcaster?
     private let lock = NSLock()
@@ -23,14 +23,22 @@ final class LocalStreamServer: @unchecked Sendable {
         do {
             let params = NWParameters.tcp
             params.allowLocalEndpointReuse = true
-            let listener = try NWListener(using: params, on: .any)
-            self.listener = listener
 
-            listener.stateUpdateHandler = { [weak self] state in
+            let preferredPort = NWEndpoint.Port(rawValue: self.port) ?? 9123
+            let newListener: NWListener
+            if let fixedListener = try? NWListener(using: params, on: preferredPort) {
+                newListener = fixedListener
+                self.port = preferredPort.rawValue
+            } else {
+                newListener = try NWListener(using: params, on: .any)
+            }
+            self.listener = newListener
+
+            newListener.stateUpdateHandler = { [weak self] state in
                 guard let self else { return }
                 switch state {
                 case .ready:
-                    if let p = listener.port?.rawValue {
+                    if let p = newListener.port?.rawValue {
                         self.port = p
                         print("[LocalStreamServer] Listening on http://127.0.0.1:\(p)")
                     }
@@ -42,11 +50,11 @@ final class LocalStreamServer: @unchecked Sendable {
                 }
             }
 
-            listener.newConnectionHandler = { [weak self] connection in
+            newListener.newConnectionHandler = { [weak self] connection in
                 self?.handleConnection(connection)
             }
 
-            listener.start(queue: .global(qos: .userInitiated))
+            newListener.start(queue: .global(qos: .userInitiated))
         } catch {
             print("[LocalStreamServer] Init error: \(error)")
         }
@@ -65,8 +73,7 @@ final class LocalStreamServer: @unchecked Sendable {
 
     func streamURL(fileId: Int, fileSize: Int64, fileName: String) -> URL {
         let encodedName = fileName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "video.mp4"
-        let portNum = port > 0 ? port : 8080
-        return URL(string: "http://127.0.0.1:\(portNum)/stream?fileId=\(fileId)&fileSize=\(fileSize)&name=\(encodedName)")!
+        return URL(string: "http://127.0.0.1:\(port)/stream?fileId=\(fileId)&fileSize=\(fileSize)&name=\(encodedName)")!
     }
 
     private func handleConnection(_ connection: NWConnection) {
