@@ -934,322 +934,370 @@ struct KSVideoPlayerRepresentable: UIViewRepresentable {
     let thumbnailFileId: Int?
     var onDismiss: () -> Void
 
-    func makeUIView(context: Context) -> IOSVideoPlayerView {
+    func makeUIView(context: Context) -> KSVideoPlayerContainerView {
         KSOptions.firstPlayerType = KSMEPlayer.self
         KSOptions.secondPlayerType = KSMEPlayer.self
         KSOptions.canBackgroundPlay = true
 
-        let player = IOSVideoPlayerView()
+        let container = KSVideoPlayerContainerView()
+        container.fileId = fileId
+        container.fileSize = fileSize
+        container.fileName = title
+        container.chatId = chatId
+        container.chatTitle = chatTitle
+        container.duration = duration
+        container.thumbnailFileId = thumbnailFileId
+        container.savedPos = AppSettings.shared.playbackPositions[fileId] ?? 0
+        container.onDismiss = onDismiss
+        container.configure(url: url, title: title)
+
+        return container
+    }
+
+    func updateUIView(_ uiView: KSVideoPlayerContainerView, context: Context) {}
+}
+
+final class KSVideoPlayerContainerView: UIView, UIGestureRecognizerDelegate {
+    let player = IOSVideoPlayerView()
+    let gestureOverlay = UIView()
+    private let volumeView = MPVolumeView(frame: CGRect(x: -1000, y: -1000, width: 1, height: 1))
+    private var volumeSlider: UISlider?
+    private var hudView: UIView?
+
+    var fileId: Int = 0
+    var fileSize: Int64 = 0
+    var fileName: String = ""
+    var chatId: Int64 = 0
+    var chatTitle: String = ""
+    var duration: Int = 0
+    var thumbnailFileId: Int? = nil
+    var savedPos: Double = 0
+    var onDismiss: (() -> Void)?
+
+    private var hasSeekedToSavedPos = false
+    private var lastTime: Double = 0
+    private var lastDuration: Double = 0
+    private var isFill = false
+
+    private var panSide: PanSide = .none
+    private var initialVolume: Float = 0
+    private var initialBrightness: CGFloat = 0
+
+    enum PanSide {
+        case none
+        case leftVolume
+        case rightBrightness
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setupViews()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setupViews()
+    }
+
+    private func setupViews() {
+        backgroundColor = .black
+        clipsToBounds = true
+
+        // 1. Player View
         player.contentMode = .scaleAspectFit
-        
-        let coordinator = context.coordinator
-        coordinator.player = player
-        coordinator.fileId = fileId
-        coordinator.fileSize = fileSize
-        coordinator.fileName = title
-        coordinator.chatId = chatId
-        coordinator.chatTitle = chatTitle
-        coordinator.duration = duration
-        coordinator.thumbnailFileId = thumbnailFileId
-        coordinator.savedPos = AppSettings.shared.playbackPositions[fileId] ?? 0
+        player.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(player)
 
-        player.backBlock = {
-            coordinator.savePosition()
-            onDismiss()
-        }
+        NSLayoutConstraint.activate([
+            player.topAnchor.constraint(equalTo: topAnchor),
+            player.leadingAnchor.constraint(equalTo: leadingAnchor),
+            player.trailingAnchor.constraint(equalTo: trailingAnchor),
+            player.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
 
-        player.playTimeDidChange = { [weak coordinator] current, total in
-            coordinator?.handleTimeChange(current: current, total: total)
-        }
+        // 2. Gesture Overlay on top of player
+        gestureOverlay.backgroundColor = .clear
+        gestureOverlay.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(gestureOverlay)
 
-        let resource = KSPlayerResource(url: url, options: KSOptions(), name: title)
-        player.set(resource: resource)
+        NSLayoutConstraint.activate([
+            gestureOverlay.topAnchor.constraint(equalTo: topAnchor),
+            gestureOverlay.leadingAnchor.constraint(equalTo: leadingAnchor),
+            gestureOverlay.trailingAnchor.constraint(equalTo: trailingAnchor),
+            gestureOverlay.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
 
-        // Pinch gesture to zoom to fill (Netflix / YouTube style)
-        let pinch = UIPinchGestureRecognizer(target: coordinator, action: #selector(Coordinator.handlePinch(_:)))
-        pinch.delegate = coordinator
-        player.addGestureRecognizer(pinch)
-
-        // Double tap to skip 10 seconds (Left = -10s, Right = +10s)
-        let doubleTap = UITapGestureRecognizer(target: coordinator, action: #selector(Coordinator.handleDoubleTap(_:)))
-        doubleTap.numberOfTapsRequired = 2
-        doubleTap.delegate = coordinator
-        player.addGestureRecognizer(doubleTap)
-
-        // Pan gesture (Left side = Sound, Right side = Brightness)
-        let pan = UIPanGestureRecognizer(target: coordinator, action: #selector(Coordinator.handlePan(_:)))
-        pan.delegate = coordinator
-        player.addGestureRecognizer(pan)
-
-        // Disable KSPlayer internal pan gestures so custom Left=Volume, Right=Brightness has 100% priority
-        for g in player.gestureRecognizers ?? [] {
-            if g is UIPanGestureRecognizer && g != pan {
-                g.isEnabled = false
-            }
-            if let tap = g as? UITapGestureRecognizer, tap != doubleTap && tap.numberOfTapsRequired == 1 {
-                tap.require(toFail: doubleTap)
-            }
-        }
-
-        DispatchQueue.main.async {
-            for g in player.gestureRecognizers ?? [] {
-                if g is UIPanGestureRecognizer && g != pan {
-                    g.isEnabled = false
-                }
-                if let tap = g as? UITapGestureRecognizer, tap != doubleTap && tap.numberOfTapsRequired == 1 {
-                    tap.require(toFail: doubleTap)
-                }
-            }
-        }
-
-        return player
-    }
-
-    func updateUIView(_ uiView: IOSVideoPlayerView, context: Context) {}
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
-    }
-
-    class Coordinator: NSObject, UIGestureRecognizerDelegate {
-        weak var player: IOSVideoPlayerView?
-        var fileId: Int = 0
-        var fileSize: Int64 = 0
-        var fileName: String = ""
-        var chatId: Int64 = 0
-        var chatTitle: String = ""
-        var duration: Int = 0
-        var thumbnailFileId: Int? = nil
-        var savedPos: Double = 0
-        private var hasSeekedToSavedPos = false
-        private var lastTime: Double = 0
-        private var lastDuration: Double = 0
-        private var isFill = false
-
-        // Pan tracking for Volume (Left) & Brightness (Right)
-        private var panSide: PanSide = .none
-        private var initialVolume: Float = 0
-        private var initialBrightness: CGFloat = 0
-        private var volumeSlider: UISlider?
-        private var hudView: UIView?
-
-        enum PanSide {
-            case none
-            case leftVolume
-            case rightBrightness
-        }
-
-        override init() {
-            super.init()
-            let volumeView = MPVolumeView(frame: CGRect(x: -1000, y: -1000, width: 1, height: 1))
-            volumeView.alpha = 0.0001
-            for sub in volumeView.subviews {
-                if let slider = sub as? UISlider {
-                    self.volumeSlider = slider
-                    break
-                }
-            }
-        }
-
-        func handleTimeChange(current: TimeInterval, total: TimeInterval) {
-            lastTime = current
-            if total > 0 { lastDuration = total }
-
-            if !hasSeekedToSavedPos && savedPos > 3 && (total == 0 || savedPos < total - 5) {
-                hasSeekedToSavedPos = true
-                player?.playerLayer?.player.seek(time: savedPos) { _ in }
-            }
-
-            // Periodic auto-save every 5 seconds
-            if Int(current) > 0 && Int(current) % 5 == 0 {
-                savePosition()
-            }
-        }
-
-        func savePosition() {
-            guard fileId != 0 && lastTime > 0 else { return }
-            DispatchQueue.main.async { [self] in
-                AppSettings.shared.savePosition(
-                    fileId: fileId,
-                    fileSize: fileSize,
-                    position: lastTime,
-                    fileName: fileName,
-                    chatId: chatId,
-                    chatTitle: chatTitle,
-                    duration: Int(lastDuration > 0 ? lastDuration : Double(duration)),
-                    thumbnailFileId: thumbnailFileId
-                )
-            }
-        }
-
-        // MARK: - Double Tap to Skip 10s (Left = -10s, Right = +10s)
-        @objc func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
-            guard let player = player else { return }
-            let location = gesture.location(in: player)
-            let isLeft = location.x < player.bounds.width / 2
-
-            let delta: Double = isLeft ? -10.0 : 10.0
-            let target = max(0, min(lastTime + delta, lastDuration > 0 ? lastDuration : lastTime + delta))
-            
-            lastTime = target
-            player.playerLayer?.player.seek(time: target) { _ in }
-            showSkipIndicator(isLeft: isLeft)
-        }
-
-        private func showSkipIndicator(isLeft: Bool) {
-            guard let player = player else { return }
-            let badge = UILabel()
-            badge.text = isLeft ? "◀◀ 10s" : "10s ▶▶"
-            badge.font = UIFont.systemFont(ofSize: 17, weight: .bold)
-            badge.textColor = .white
-            badge.textAlignment = .center
-            badge.backgroundColor = UIColor.black.withAlphaComponent(0.75)
-            badge.layer.cornerRadius = 20
-            badge.clipsToBounds = true
-
-            let width: CGFloat = 110
-            let height: CGFloat = 44
-            let xPos = isLeft ? player.bounds.width * 0.25 - width / 2 : player.bounds.width * 0.75 - width / 2
-            badge.frame = CGRect(x: xPos, y: player.bounds.midY - height / 2, width: width, height: height)
-            badge.alpha = 0
-            badge.transform = CGAffineTransform(scaleX: 0.7, y: 0.7)
-            player.addSubview(badge)
-            player.bringSubviewToFront(badge)
-
-            UIView.animate(withDuration: 0.2, animations: {
-                badge.alpha = 1
-                badge.transform = .identity
-            }) { _ in
-                UIView.animate(withDuration: 0.3, delay: 0.3, options: .curveEaseOut, animations: {
-                    badge.alpha = 0
-                    badge.transform = CGAffineTransform(scaleX: 1.2, y: 1.2)
-                }) { _ in
-                    badge.removeFromSuperview()
-                }
-            }
-        }
-
-        // MARK: - Pan Gesture (Left = Volume, Right = Brightness)
-        @objc func handlePan(_ gesture: UIPanGestureRecognizer) {
-            guard let player = player else { return }
-            let location = gesture.location(in: player)
-            let translation = gesture.translation(in: player)
-
-            switch gesture.state {
-            case .began:
-                if location.x < player.bounds.width / 2 {
-                    panSide = .leftVolume
-                    initialVolume = AVAudioSession.sharedInstance().outputVolume
-                } else {
-                    panSide = .rightBrightness
-                    initialBrightness = UIScreen.main.brightness
-                }
-            case .changed:
-                let delta = -Float(translation.y / (player.bounds.height * 0.6))
-                if panSide == .leftVolume {
-                    let newVol = max(0, min(1.0, initialVolume + delta))
-                    volumeSlider?.value = newVol
-                    showHUD(text: "Volume: \(Int(newVol * 100))%", icon: "speaker.wave.3.fill", isLeft: true)
-                } else if panSide == .rightBrightness {
-                    let newBright = max(0, min(1.0, Float(initialBrightness) + delta))
-                    UIScreen.main.brightness = CGFloat(newBright)
-                    showHUD(text: "Brightness: \(Int(newBright * 100))%", icon: "sun.max.fill", isLeft: false)
-                }
-            case .ended, .cancelled:
-                panSide = .none
-                hideHUD()
-            default:
+        // 3. Volume View for system volume control
+        volumeView.alpha = 0.0001
+        volumeView.clipsToBounds = true
+        addSubview(volumeView)
+        for sub in volumeView.subviews {
+            if let slider = sub as? UISlider {
+                self.volumeSlider = slider
                 break
             }
         }
 
-        private func showHUD(text: String, icon: String, isLeft: Bool) {
-            guard let player = player else { return }
-            if hudView == nil {
-                let container = UIView()
-                container.backgroundColor = UIColor.black.withAlphaComponent(0.75)
-                container.layer.cornerRadius = 14
-                container.clipsToBounds = true
+        // 4. Gestures on Gesture Overlay
+        let pinch = UIPinchGestureRecognizer(target: self, action: #selector(handlePinch(_:)))
+        pinch.delegate = self
+        gestureOverlay.addGestureRecognizer(pinch)
 
-                let iconView = UIImageView()
-                iconView.image = UIImage(systemName: icon)
-                iconView.tintColor = .white
-                iconView.contentMode = .scaleAspectFit
-                iconView.tag = 101
+        let doubleTap = UITapGestureRecognizer(target: self, action: #selector(handleDoubleTap(_:)))
+        doubleTap.numberOfTapsRequired = 2
+        doubleTap.delegate = self
+        gestureOverlay.addGestureRecognizer(doubleTap)
 
-                let label = UILabel()
-                label.font = UIFont.systemFont(ofSize: 14, weight: .semibold)
-                label.textColor = .white
-                label.tag = 102
+        let singleTap = UITapGestureRecognizer(target: self, action: #selector(handleSingleTap(_:)))
+        singleTap.numberOfTapsRequired = 1
+        singleTap.delegate = self
+        singleTap.require(toFail: doubleTap)
+        gestureOverlay.addGestureRecognizer(singleTap)
 
-                let stack = UIStackView(arrangedSubviews: [iconView, label])
-                stack.axis = .horizontal
-                stack.spacing = 8
-                stack.alignment = .center
-                stack.translatesAutoresizingMaskIntoConstraints = false
-                container.addSubview(stack)
+        let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
+        pan.delegate = self
+        gestureOverlay.addGestureRecognizer(pan)
+    }
 
-                NSLayoutConstraint.activate([
-                    stack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 14),
-                    stack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -14),
-                    stack.topAnchor.constraint(equalTo: container.topAnchor, constant: 10),
-                    stack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -10),
-                    iconView.widthAnchor.constraint(equalToConstant: 20),
-                    iconView.heightAnchor.constraint(equalToConstant: 20)
-                ])
-
-                player.addSubview(container)
-                hudView = container
-            }
-
-            if let container = hudView,
-               let iconView = container.viewWithTag(101) as? UIImageView,
-               let label = container.viewWithTag(102) as? UILabel {
-                player.bringSubviewToFront(container)
-                iconView.image = UIImage(systemName: icon)
-                label.text = text
-                container.sizeToFit()
-
-                let xPos = isLeft ? 24 : player.bounds.width - container.bounds.width - 24
-                container.frame = CGRect(x: xPos, y: 70, width: container.bounds.width + 28, height: 40)
-                container.alpha = 1.0
-            }
+    func configure(url: URL, title: String) {
+        player.backBlock = { [weak self] in
+            self?.savePosition()
+            self?.onDismiss?()
         }
 
-        private func hideHUD() {
-            UIView.animate(withDuration: 0.3, delay: 0.4, options: .curveEaseOut, animations: {
-                self.hudView?.alpha = 0
-            }) { _ in
-                self.hudView?.removeFromSuperview()
-                self.hudView = nil
-            }
+        player.playTimeDidChange = { [weak self] current, total in
+            self?.handleTimeChange(current: current, total: total)
         }
 
-        // MARK: - Pinch Inward / Outward (Zoom to Fill under Dynamic Island)
-        @objc func handlePinch(_ gesture: UIPinchGestureRecognizer) {
-            guard gesture.state == .ended, let player = player else { return }
+        let options = KSOptions()
+        options.isAutoPlay = true
+        options.isSeekedAutoPlay = true
+        let resource = KSPlayerResource(url: url, options: options, name: title)
+        player.set(resource: resource)
+    }
+
+    func handleTimeChange(current: TimeInterval, total: TimeInterval) {
+        lastTime = current
+        if total > 0 { lastDuration = total }
+
+        if !hasSeekedToSavedPos && savedPos > 3 && (total == 0 || savedPos < total - 5) {
+            hasSeekedToSavedPos = true
+            player.playerLayer?.player.seek(time: savedPos) { _ in }
+        }
+
+        if Int(current) > 0 && Int(current) % 5 == 0 {
+            savePosition()
+        }
+    }
+
+    func savePosition() {
+        guard fileId != 0 && lastTime > 0 else { return }
+        DispatchQueue.main.async { [self] in
+            AppSettings.shared.savePosition(
+                fileId: fileId,
+                fileSize: fileSize,
+                position: lastTime,
+                fileName: fileName,
+                chatId: chatId,
+                chatTitle: chatTitle,
+                duration: Int(lastDuration > 0 ? lastDuration : Double(duration)),
+                thumbnailFileId: thumbnailFileId
+            )
+        }
+    }
+
+    // MARK: - Gestures
+    @objc private func handleSingleTap(_ gesture: UITapGestureRecognizer) {
+        let isHidden = player.toolBar.alpha < 0.5
+        UIView.animate(withDuration: 0.25) {
+            self.player.toolBar.alpha = isHidden ? 1.0 : 0.0
+            self.player.navigationBar.alpha = isHidden ? 1.0 : 0.0
+        }
+    }
+
+    @objc private func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
+        let location = gesture.location(in: gestureOverlay)
+        let isLeft = location.x < gestureOverlay.bounds.width / 2
+
+        let delta: Double = isLeft ? -10.0 : 10.0
+        let target = max(0, min(lastTime + delta, lastDuration > 0 ? lastDuration : lastTime + delta))
+        lastTime = target
+
+        player.playerLayer?.player.seek(time: target) { _ in }
+        showSkipIndicator(isLeft: isLeft)
+    }
+
+    @objc private func handlePan(_ gesture: UIPanGestureRecognizer) {
+        let location = gesture.location(in: gestureOverlay)
+        let translation = gesture.translation(in: gestureOverlay)
+
+        switch gesture.state {
+        case .began:
+            if location.x < gestureOverlay.bounds.width / 2 {
+                panSide = .leftVolume
+                initialVolume = AVAudioSession.sharedInstance().outputVolume
+                if volumeSlider == nil {
+                    for sub in volumeView.subviews {
+                        if let slider = sub as? UISlider {
+                            self.volumeSlider = slider
+                            break
+                        }
+                    }
+                }
+            } else {
+                panSide = .rightBrightness
+                initialBrightness = UIScreen.main.brightness
+            }
+        case .changed:
+            let delta = -Float(translation.y / (gestureOverlay.bounds.height * 0.55))
+            if panSide == .leftVolume {
+                let newVol = max(0, min(1.0, initialVolume + delta))
+                volumeSlider?.value = newVol
+                showHUD(text: "Volume: \(Int(newVol * 100))%", icon: "speaker.wave.3.fill", isLeft: true)
+            } else if panSide == .rightBrightness {
+                let newBright = max(0, min(1.0, Float(initialBrightness) + delta))
+                UIScreen.main.brightness = CGFloat(newBright)
+                showHUD(text: "Brightness: \(Int(newBright * 100))%", icon: "sun.max.fill", isLeft: false)
+            }
+        case .ended, .cancelled:
+            panSide = .none
+            hideHUD()
+        default:
+            break
+        }
+    }
+
+    @objc private func handlePinch(_ gesture: UIPinchGestureRecognizer) {
+        if gesture.state == .ended {
             if gesture.scale > 1.15 && !isFill {
                 isFill = true
-                UIView.animate(withDuration: 0.25) {
-                    player.contentMode = .scaleAspectFill
+                UIView.animate(withDuration: 0.3) {
+                    self.player.transform = CGAffineTransform(scaleX: 1.28, y: 1.28)
                 }
             } else if gesture.scale < 0.85 && isFill {
                 isFill = false
-                UIView.animate(withDuration: 0.25) {
-                    player.contentMode = .scaleAspectFit
+                UIView.animate(withDuration: 0.3) {
+                    self.player.transform = .identity
                 }
             }
         }
+    }
 
-        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
-            if gestureRecognizer is UIPanGestureRecognizer && otherGestureRecognizer is UIPanGestureRecognizer {
-                return false
+    private func showSkipIndicator(isLeft: Bool) {
+        let badge = UILabel()
+        badge.text = isLeft ? "◀◀ 10s" : "10s ▶▶"
+        badge.font = UIFont.systemFont(ofSize: 17, weight: .bold)
+        badge.textColor = .white
+        badge.textAlignment = .center
+        badge.backgroundColor = UIColor.black.withAlphaComponent(0.75)
+        badge.layer.cornerRadius = 20
+        badge.clipsToBounds = true
+
+        let width: CGFloat = 110
+        let height: CGFloat = 44
+        let xPos = isLeft ? bounds.width * 0.25 - width / 2 : bounds.width * 0.75 - width / 2
+        badge.frame = CGRect(x: xPos, y: bounds.midY - height / 2, width: width, height: height)
+        badge.alpha = 0
+        badge.transform = CGAffineTransform(scaleX: 0.7, y: 0.7)
+        addSubview(badge)
+        bringSubviewToFront(badge)
+
+        UIView.animate(withDuration: 0.2, animations: {
+            badge.alpha = 1
+            badge.transform = .identity
+        }) { _ in
+            UIView.animate(withDuration: 0.3, delay: 0.3, options: .curveEaseOut, animations: {
+                badge.alpha = 0
+                badge.transform = CGAffineTransform(scaleX: 1.2, y: 1.2)
+            }) { _ in
+                badge.removeFromSuperview()
             }
-            if gestureRecognizer is UIPinchGestureRecognizer || otherGestureRecognizer is UIPinchGestureRecognizer {
-                return true
-            }
-            return false
         }
+    }
+
+    private func showHUD(text: String, icon: String, isLeft: Bool) {
+        if hudView == nil {
+            let container = UIView()
+            container.backgroundColor = UIColor.black.withAlphaComponent(0.75)
+            container.layer.cornerRadius = 14
+            container.clipsToBounds = true
+
+            let iconView = UIImageView()
+            iconView.image = UIImage(systemName: icon)
+            iconView.tintColor = .white
+            iconView.contentMode = .scaleAspectFit
+            iconView.tag = 101
+
+            let label = UILabel()
+            label.font = UIFont.systemFont(ofSize: 14, weight: .semibold)
+            label.textColor = .white
+            label.tag = 102
+
+            let stack = UIStackView(arrangedSubviews: [iconView, label])
+            stack.axis = .horizontal
+            stack.spacing = 8
+            stack.alignment = .center
+            stack.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(stack)
+
+            NSLayoutConstraint.activate([
+                stack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 14),
+                stack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -14),
+                stack.topAnchor.constraint(equalTo: container.topAnchor, constant: 10),
+                stack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -10),
+                iconView.widthAnchor.constraint(equalToConstant: 20),
+                iconView.heightAnchor.constraint(equalToConstant: 20)
+            ])
+
+            addSubview(container)
+            hudView = container
+        }
+
+        if let container = hudView,
+           let iconView = container.viewWithTag(101) as? UIImageView,
+           let label = container.viewWithTag(102) as? UILabel {
+            bringSubviewToFront(container)
+            iconView.image = UIImage(systemName: icon)
+            label.text = text
+            container.sizeToFit()
+
+            let xPos = isLeft ? 24 : bounds.width - container.bounds.width - 24
+            container.frame = CGRect(x: xPos, y: 70, width: container.bounds.width + 28, height: 40)
+            container.alpha = 1.0
+        }
+    }
+
+    private func hideHUD() {
+        UIView.animate(withDuration: 0.3, delay: 0.4, options: .curveEaseOut, animations: {
+            self.hudView?.alpha = 0
+        }) { _ in
+            self.hudView?.removeFromSuperview()
+            self.hudView = nil
+        }
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        return false
+    }
+
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        if player.navigationBar.alpha > 0.5 {
+            let navPoint = convert(point, to: player.navigationBar)
+            if player.navigationBar.point(inside: navPoint, with: event) {
+                if let hit = player.navigationBar.hitTest(navPoint, with: event), hit is UIButton || hit is UISlider {
+                    return hit
+                }
+            }
+        }
+        if player.toolBar.alpha > 0.5 {
+            let toolPoint = convert(point, to: player.toolBar)
+            if player.toolBar.point(inside: toolPoint, with: event) {
+                if let hit = player.toolBar.hitTest(toolPoint, with: event), hit is UIButton || hit is UISlider {
+                    return hit
+                }
+            }
+        }
+        return gestureOverlay
     }
 }
 
