@@ -53,6 +53,12 @@ struct PlayerView: View {
                 KSVideoPlayerRepresentable(
                     url: streamURL,
                     title: fileName,
+                    fileId: fileId,
+                    fileSize: fileSize,
+                    chatId: chatId,
+                    chatTitle: chatTitle,
+                    duration: duration,
+                    thumbnailFileId: thumbnailFileId,
                     onDismiss: { dismiss() }
                 )
                 .ignoresSafeArea()
@@ -864,6 +870,12 @@ class PlayerUIView: UIView {
 struct KSVideoPlayerRepresentable: UIViewRepresentable {
     let url: URL
     let title: String
+    let fileId: Int
+    let fileSize: Int64
+    let chatId: Int64
+    let chatTitle: String
+    let duration: Int
+    let thumbnailFileId: Int?
     var onDismiss: () -> Void
 
     func makeUIView(context: Context) -> IOSVideoPlayerView {
@@ -873,9 +885,27 @@ struct KSVideoPlayerRepresentable: UIViewRepresentable {
 
         let player = IOSVideoPlayerView()
         player.contentMode = .scaleAspectFit
+        
+        let coordinator = context.coordinator
+        coordinator.player = player
+        coordinator.fileId = fileId
+        coordinator.fileSize = fileSize
+        coordinator.fileName = title
+        coordinator.chatId = chatId
+        coordinator.chatTitle = chatTitle
+        coordinator.duration = duration
+        coordinator.thumbnailFileId = thumbnailFileId
+        coordinator.savedPos = AppSettings.shared.playbackPositions[fileId] ?? 0
+
         player.backBlock = {
+            coordinator.savePosition()
             onDismiss()
         }
+
+        player.playTimeDidChange = { [weak coordinator] current, total in
+            coordinator?.handleTimeChange(current: current, total: total)
+        }
+
         let resource = KSPlayerResource(url: url, options: KSOptions(), name: title)
         player.set(resource: resource)
 
@@ -888,7 +918,6 @@ struct KSVideoPlayerRepresentable: UIViewRepresentable {
         doubleTap.numberOfTapsRequired = 2
         player.addGestureRecognizer(doubleTap)
 
-        context.coordinator.player = player
         return player
     }
 
@@ -900,7 +929,50 @@ struct KSVideoPlayerRepresentable: UIViewRepresentable {
 
     class Coordinator: NSObject {
         weak var player: IOSVideoPlayerView?
+        var fileId: Int = 0
+        var fileSize: Int64 = 0
+        var fileName: String = ""
+        var chatId: Int64 = 0
+        var chatTitle: String = ""
+        var duration: Int = 0
+        var thumbnailFileId: Int? = nil
+        var savedPos: Double = 0
+        private var hasSeekedToSavedPos = false
+        private var lastTime: Double = 0
+        private var lastDuration: Double = 0
         private var isFill = false
+
+        func handleTimeChange(current: TimeInterval, total: TimeInterval) {
+            lastTime = current
+            if total > 0 { lastDuration = total }
+
+            if !hasSeekedToSavedPos && savedPos > 3 && (total == 0 || savedPos < total - 5) {
+                hasSeekedToSavedPos = true
+                let cmTime = CMTime(seconds: savedPos, preferredTimescale: 600)
+                player?.player?.seek(to: cmTime)
+            }
+
+            // Periodic auto-save every 5 seconds
+            if Int(current) > 0 && Int(current) % 5 == 0 {
+                savePosition()
+            }
+        }
+
+        func savePosition() {
+            guard fileId != 0 && lastTime > 0 else { return }
+            DispatchQueue.main.async { [self] in
+                AppSettings.shared.savePosition(
+                    fileId: fileId,
+                    fileSize: fileSize,
+                    position: lastTime,
+                    fileName: fileName,
+                    chatId: chatId,
+                    chatTitle: chatTitle,
+                    duration: Int(lastDuration > 0 ? lastDuration : Double(duration)),
+                    thumbnailFileId: thumbnailFileId
+                )
+            }
+        }
 
         @objc func handlePinch(_ gesture: UIPinchGestureRecognizer) {
             guard gesture.state == .ended, let player = player else { return }
