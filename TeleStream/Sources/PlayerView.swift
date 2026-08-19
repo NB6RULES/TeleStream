@@ -1232,13 +1232,11 @@ struct KSVideoPlayerRepresentable: UIViewRepresentable {
                 isFill = true
                 UIView.animate(withDuration: 0.25) {
                     player.contentMode = .scaleAspectFill
-                    player.playerLayer?.contentMode = .scaleAspectFill
                 }
             } else if gesture.scale < 0.85 && isFill {
                 isFill = false
                 UIView.animate(withDuration: 0.25) {
                     player.contentMode = .scaleAspectFit
-                    player.playerLayer?.contentMode = .scaleAspectFit
                 }
             }
         }
