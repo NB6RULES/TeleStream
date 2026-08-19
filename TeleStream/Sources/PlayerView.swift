@@ -64,11 +64,20 @@ struct PlayerView: View {
                 .ignoresSafeArea()
             } else {
                 // Video rendering layer
-                CustomVideoPlayerView(player: viewModel.player, videoGravity: viewModel.videoGravity)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        viewModel.toggleControlsVisibility()
+                CustomVideoPlayerView(
+                    player: viewModel.player,
+                    videoGravity: viewModel.videoGravity,
+                    onToggleAspect: {
+                        viewModel.toggleAspect()
+                    },
+                    onSeek: { target in
+                        viewModel.currentPosition = target
                     }
+                )
+                .ignoresSafeArea()
+                .onTapGesture {
+                    viewModel.toggleControlsVisibility()
+                }
 
             // Unified Centered Buffering Indicator
             if viewModel.isLoading && viewModel.error == nil {
@@ -847,18 +856,64 @@ class PlayerViewModel: ObservableObject {
 struct CustomVideoPlayerView: UIViewRepresentable {
     let player: AVPlayer
     let videoGravity: AVLayerVideoGravity
+    var onToggleAspect: (() -> Void)? = nil
+    var onSeek: ((Double) -> Void)? = nil
 
     func makeUIView(context: Context) -> PlayerUIView {
         let view = PlayerUIView()
         view.playerLayer.player = player
         view.playerLayer.videoGravity = videoGravity
         view.backgroundColor = .black
+
+        let coordinator = context.coordinator
+        coordinator.player = player
+        coordinator.onToggleAspect = onToggleAspect
+        coordinator.onSeek = onSeek
+
+        let pinch = UIPinchGestureRecognizer(target: coordinator, action: #selector(PlayerCoordinator.handlePinch(_:)))
+        view.addGestureRecognizer(pinch)
+
+        let doubleTap = UITapGestureRecognizer(target: coordinator, action: #selector(PlayerCoordinator.handleDoubleTap(_:)))
+        doubleTap.numberOfTapsRequired = 2
+        view.addGestureRecognizer(doubleTap)
+
         return view
     }
 
     func updateUIView(_ uiView: PlayerUIView, context: Context) {
         uiView.playerLayer.player = player
         uiView.playerLayer.videoGravity = videoGravity
+    }
+
+    func makeCoordinator() -> PlayerCoordinator {
+        PlayerCoordinator()
+    }
+
+    class PlayerCoordinator: NSObject {
+        weak var player: AVPlayer?
+        var onToggleAspect: (() -> Void)?
+        var onSeek: ((Double) -> Void)?
+
+        @objc func handlePinch(_ gesture: UIPinchGestureRecognizer) {
+            guard gesture.state == .ended else { return }
+            if gesture.scale > 1.15 || gesture.scale < 0.85 {
+                onToggleAspect?()
+            }
+        }
+
+        @objc func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
+            guard let view = gesture.view, let player = player else { return }
+            let location = gesture.location(in: view)
+            let isLeft = location.x < view.bounds.width / 2
+            let delta: Double = isLeft ? -10.0 : 10.0
+            
+            let currentTime = player.currentTime().seconds
+            if !currentTime.isNaN {
+                let target = max(0, currentTime + delta)
+                player.seek(to: CMTime(seconds: target, preferredTimescale: 600))
+                onSeek?(target)
+            }
+        }
     }
 }
 
