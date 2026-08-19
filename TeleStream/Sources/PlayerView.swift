@@ -938,6 +938,8 @@ struct KSVideoPlayerRepresentable: UIViewRepresentable {
         KSOptions.firstPlayerType = KSMEPlayer.self
         KSOptions.secondPlayerType = KSMEPlayer.self
         KSOptions.canBackgroundPlay = true
+        KSOptions.isAutoPlay = true
+        KSOptions.isSeekedAutoPlay = true
 
         let container = KSVideoPlayerContainerView()
         container.fileId = fileId
@@ -1069,10 +1071,7 @@ final class KSVideoPlayerContainerView: UIView, UIGestureRecognizerDelegate {
             self?.handleTimeChange(current: current, total: total)
         }
 
-        let options = KSOptions()
-        options.isAutoPlay = true
-        options.isSeekedAutoPlay = true
-        let resource = KSPlayerResource(url: url, options: options, name: title)
+        let resource = KSPlayerResource(url: url, options: KSOptions(), name: title)
         player.set(resource: resource)
     }
 
