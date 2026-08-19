@@ -861,40 +861,54 @@ class PlayerUIView: UIView {
     var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
 }
 
+final class CustomKSPlayerView: IOSVideoPlayerView {
+    override func updateUI(isLandscape: Bool) {
+        super.updateUI(isLandscape: isLandscape)
+        toolBar.playbackRateButton.isHidden = false
+        toolBar.subtitleButton.isHidden = false
+        toolBar.playbackRateButton.alpha = 1.0
+        toolBar.subtitleButton.alpha = 1.0
+    }
+
+    override func onButtonPressed(type: PlayerButtonType, button: UIButton) {
+        if type == .landscape {
+            // Toggle aspect ratio (Fit vs Zoom to Fill entire display under Dynamic Island)
+            UIView.animate(withDuration: 0.25) {
+                if self.contentMode == .scaleAspectFill {
+                    self.contentMode = .scaleAspectFit
+                } else {
+                    self.contentMode = .scaleAspectFill
+                }
+            }
+        } else {
+            super.onButtonPressed(type: type, button: button)
+        }
+    }
+}
+
 struct KSVideoPlayerRepresentable: UIViewRepresentable {
     let url: URL
     let title: String
     var onDismiss: () -> Void
 
-    func makeUIView(context: Context) -> UIView {
-        let container = UIView()
-        container.backgroundColor = .black
-
+    func makeUIView(context: Context) -> CustomKSPlayerView {
         KSOptions.firstPlayerType = KSMEPlayer.self
         KSOptions.secondPlayerType = KSMEPlayer.self
         KSOptions.canBackgroundPlay = true
 
-        let player = IOSVideoPlayerView()
+        let player = CustomKSPlayerView()
         player.backgroundColor = .black
+        player.contentMode = .scaleAspectFit
         player.backBlock = {
             onDismiss()
         }
         let resource = KSPlayerResource(url: url, options: KSOptions(), name: title)
         player.set(resource: resource)
-
-        container.addSubview(player)
-        player.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            player.topAnchor.constraint(equalTo: container.safeAreaLayoutGuide.topAnchor),
-            player.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            player.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            player.bottomAnchor.constraint(equalTo: container.bottomAnchor)
-        ])
-
-        return container
+        return player
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {}
+    func updateUIView(_ uiView: CustomKSPlayerView, context: Context) {}
 }
+
 
 
