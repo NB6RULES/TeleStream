@@ -865,9 +865,7 @@ final class CustomKSPlayerView: IOSVideoPlayerView {
     override func updateUI(isLandscape: Bool) {
         super.updateUI(isLandscape: isLandscape)
         toolBar.playbackRateButton.isHidden = false
-        toolBar.subtitleButton.isHidden = false
         toolBar.playbackRateButton.alpha = 1.0
-        toolBar.subtitleButton.alpha = 1.0
     }
 
     override func onButtonPressed(type: PlayerButtonType, button: UIButton) {
