@@ -36,8 +36,7 @@ struct PlayerView: View {
     @Environment(\.dismiss) var dismiss
 
     private var isMKV: Bool {
-        let ext = (fileName as NSString).pathExtension.lowercased()
-        return ext == "mkv" || ext == "avi" || ext == "webm" || ext == "flv" || ext == "wmv" || ext == "vob" || ext == "mpg" || ext == "mpeg"
+        return true // Unified high-performance player with full subtitle, audio track, gesture, and resume support for all formats (MKV, MP4, AVI, WebM, MOV, etc.)
     }
 
     private var streamURL: URL {
@@ -982,6 +981,27 @@ struct KSVideoPlayerRepresentable: UIViewRepresentable {
         pan.delegate = coordinator
         player.addGestureRecognizer(pan)
 
+        // Disable KSPlayer internal pan gestures so custom Left=Volume, Right=Brightness has 100% priority
+        for g in player.gestureRecognizers ?? [] {
+            if g is UIPanGestureRecognizer && g != pan {
+                g.isEnabled = false
+            }
+            if let tap = g as? UITapGestureRecognizer, tap != doubleTap && tap.numberOfTapsRequired == 1 {
+                tap.require(toFail: doubleTap)
+            }
+        }
+
+        DispatchQueue.main.async {
+            for g in player.gestureRecognizers ?? [] {
+                if g is UIPanGestureRecognizer && g != pan {
+                    g.isEnabled = false
+                }
+                if let tap = g as? UITapGestureRecognizer, tap != doubleTap && tap.numberOfTapsRequired == 1 {
+                    tap.require(toFail: doubleTap)
+                }
+            }
+        }
+
         return player
     }
 
@@ -1094,6 +1114,7 @@ struct KSVideoPlayerRepresentable: UIViewRepresentable {
             badge.alpha = 0
             badge.transform = CGAffineTransform(scaleX: 0.7, y: 0.7)
             player.addSubview(badge)
+            player.bringSubviewToFront(badge)
 
             UIView.animate(withDuration: 0.2, animations: {
                 badge.alpha = 1
@@ -1184,6 +1205,7 @@ struct KSVideoPlayerRepresentable: UIViewRepresentable {
             if let container = hudView,
                let iconView = container.viewWithTag(101) as? UIImageView,
                let label = container.viewWithTag(102) as? UILabel {
+                player.bringSubviewToFront(container)
                 iconView.image = UIImage(systemName: icon)
                 label.text = text
                 container.sizeToFit()
@@ -1210,16 +1232,21 @@ struct KSVideoPlayerRepresentable: UIViewRepresentable {
                 isFill = true
                 UIView.animate(withDuration: 0.25) {
                     player.contentMode = .scaleAspectFill
+                    player.playerLayer?.contentMode = .scaleAspectFill
                 }
             } else if gesture.scale < 0.85 && isFill {
                 isFill = false
                 UIView.animate(withDuration: 0.25) {
                     player.contentMode = .scaleAspectFit
+                    player.playerLayer?.contentMode = .scaleAspectFit
                 }
             }
         }
 
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+            if gestureRecognizer is UIPanGestureRecognizer && otherGestureRecognizer is UIPanGestureRecognizer {
+                return false
+            }
             if gestureRecognizer is UIPinchGestureRecognizer || otherGestureRecognizer is UIPinchGestureRecognizer {
                 return true
             }
