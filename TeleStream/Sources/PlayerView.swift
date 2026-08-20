@@ -936,7 +936,8 @@ class PlayerViewModel: ObservableObject {
         videoGravity = (videoGravity == .resizeAspect) ? .resizeAspectFill : .resizeAspect
         if isMKV {
             UIView.animate(withDuration: 0.25) {
-                self.ksPlayerView?.transform = (self.videoGravity == .resizeAspect) ? .identity : CGAffineTransform(scaleX: 1.28, y: 1.28)
+                self.ksPlayerView?.contentMode = (self.videoGravity == .resizeAspect) ? .scaleAspectFit : .scaleAspectFill
+                self.ksPlayerView?.playerLayer?.contentsGravity = (self.videoGravity == .resizeAspect) ? .resizeAspect : .resizeAspectFill
             }
         }
         resetControlsTimer()
@@ -1360,6 +1361,19 @@ final class CustomKSPlayerView: IOSVideoPlayerView {
         super.player(layer: layer, state: state)
         onStateChange?(state)
     }
+
+    override func updateUI(isLandscape: Bool) {
+        super.updateUI(isLandscape: isLandscape)
+        toolBar.isHidden = true
+        navigationBar.isHidden = true
+        loadingView.isHidden = true
+        subviews.forEach { view in
+            // Hide all KSPlayer specific subviews except the playerLayer which is a CALayer
+            if view != self {
+                view.isHidden = true
+            }
+        }
+    }
 }
 
 // KSPlayer video surface for MKV / AVI / WebM / TS
@@ -1379,6 +1393,8 @@ struct KSVideoPlayerSurfaceView: UIViewRepresentable {
         playerView.toolBar.isHidden = true
         playerView.navigationBar.isHidden = true
         playerView.backgroundColor = .black
+        playerView.contentMode = (viewModel.videoGravity == .resizeAspect) ? .scaleAspectFit : .scaleAspectFill
+        playerView.playerLayer?.contentsGravity = (viewModel.videoGravity == .resizeAspect) ? .resizeAspect : .resizeAspectFill
 
         // Disable internal gestures on KSPlayer so our GestureOverlayView has full priority
         for g in playerView.gestureRecognizers ?? [] {
@@ -1392,7 +1408,8 @@ struct KSVideoPlayerSurfaceView: UIViewRepresentable {
 
     func updateUIView(_ uiView: CustomKSPlayerView, context: Context) {
         UIView.animate(withDuration: 0.25) {
-            uiView.transform = (viewModel.videoGravity == .resizeAspect) ? .identity : CGAffineTransform(scaleX: 1.28, y: 1.28)
+            uiView.contentMode = (viewModel.videoGravity == .resizeAspect) ? .scaleAspectFit : .scaleAspectFill
+            uiView.playerLayer?.contentsGravity = (viewModel.videoGravity == .resizeAspect) ? .resizeAspect : .resizeAspectFill
         }
     }
 }

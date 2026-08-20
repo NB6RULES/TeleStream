@@ -28,6 +28,9 @@ final class TelegramClient: ObservableObject {
         Task {
             await start()
         }
+        Task { @MainActor in
+            LocalStreamServer.shared.start(with: self)
+        }
     }
 
     private func handleUpdate(data: Data) {
@@ -378,7 +381,15 @@ final class TelegramClient: ObservableObject {
                 }
             }
         } catch {
-            // ignore thumbnail download error
+            do {
+                _ = try await client.downloadFile(
+                    fileId: fileId,
+                    limit: 0,
+                    offset: 0,
+                    priority: 1,
+                    synchronous: false
+                )
+            } catch {}
         }
         return nil
     }
@@ -450,6 +461,9 @@ final class TelegramClient: ObservableObject {
 
         Task {
             await start()
+        }
+        Task { @MainActor in
+            LocalStreamServer.shared.start(with: self)
         }
     }
 }

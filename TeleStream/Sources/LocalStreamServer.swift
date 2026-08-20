@@ -241,6 +241,7 @@ final class LocalStreamServer: @unchecked Sendable {
 
         var currentOffset = startOffset
         let chunkSize: Int64 = 1024 * 1024 // 1MB chunks
+        var errorCount = 0
 
         while currentOffset <= endOffset {
             lock.lock()
@@ -298,8 +299,14 @@ final class LocalStreamServer: @unchecked Sendable {
                 }
 
                 currentOffset += Int64(data.count)
+                errorCount = 0
             } catch {
-                break
+                errorCount += 1
+                if errorCount > 15 {
+                    break
+                }
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                continue
             }
         }
 
