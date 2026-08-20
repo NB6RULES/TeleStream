@@ -4,6 +4,7 @@ import AVFoundation
 import UIKit
 import Combine
 import KSPlayer
+import MediaPlayer
 
 struct ActivePlayerItem: Identifiable, Equatable {
     var id: Int { fileId }
@@ -18,6 +19,18 @@ struct ActivePlayerItem: Identifiable, Equatable {
 
     static func == (lhs: ActivePlayerItem, rhs: ActivePlayerItem) -> Bool {
         lhs.fileId == rhs.fileId
+    }
+}
+
+struct MediaOptionItem: Identifiable, Equatable {
+    let id: String
+    let name: String
+    var avOption: AVMediaSelectionOption? = nil
+    var avGroup: AVMediaSelectionGroup? = nil
+    var ksTrack: MediaPlayerTrack? = nil
+
+    static func == (lhs: MediaOptionItem, rhs: MediaOptionItem) -> Bool {
+        lhs.id == rhs.id
     }
 }
 
@@ -59,27 +72,28 @@ struct PlayerView: View {
     }
 
     var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
+        GeometryReader { geometry in
+            ZStack {
+                Color.black.ignoresSafeArea()
 
-            if isMKV {
-                KSVideoPlayerRepresentable(
-                    url: streamURL,
-                    title: fileName,
-                    fileId: fileId,
-                    fileSize: fileSize,
-                    chatId: chatId,
-                    chatTitle: chatTitle,
-                    duration: duration,
-                    thumbnailFileId: thumbnailFileId,
-                    onDismiss: { dismiss() }
-                )
-                .ignoresSafeArea()
-            } else {
-                // Video rendering layer for MP4 / MOV / M4V
-                CustomVideoPlayerView(
-                    player: viewModel.player,
-                    videoGravity: viewModel.videoGravity,
+                // 1. Video Surface Layer (KSPlayer for MKV/non-native, AVPlayer for MP4/MOV)
+                if isMKV {
+                    KSVideoPlayerSurfaceView(
+                        url: streamURL,
+                        title: fileName,
+                        viewModel: viewModel
+                    )
+                    .ignoresSafeArea()
+                } else {
+                    CustomVideoPlayerView(
+                        player: viewModel.player,
+                        videoGravity: viewModel.videoGravity
+                    )
+                    .ignoresSafeArea()
+                }
+
+                // 2. Gesture Overlay Layer
+                GestureOverlayView(
                     onToggleAspect: {
                         viewModel.toggleAspect()
                         triggerAspectHUD()
@@ -102,7 +116,7 @@ struct PlayerView: View {
                 )
                 .ignoresSafeArea()
 
-                // Unified Centered Buffering Indicator
+                // 3. Unified Centered Buffering Indicator
                 if viewModel.isLoading && viewModel.error == nil {
                     VStack(spacing: 12) {
                         ProgressView()
@@ -119,73 +133,77 @@ struct PlayerView: View {
                     .transition(.opacity)
                 }
 
-                // Skip 10s feedback badge (Halfway Down)
-                if let skip = skipBadge {
-                    HStack {
-                        if !skip.isLeft { Spacer() }
-                        HStack(spacing: 8) {
-                            Image(systemName: skip.isLeft ? "gobackward.10" : "goforward.10")
-                                .font(.system(size: 20, weight: .bold))
-                            Text(skip.text)
-                                .font(.system(size: 16, weight: .bold))
+                // 4. Floating HUDs at 3/4 distance from bottom of screen (25% from top)
+                VStack {
+                    Spacer()
+                        .frame(height: geometry.size.height * 0.25)
+
+                    // Skip 10s feedback badge
+                    if let skip = skipBadge {
+                        HStack {
+                            if !skip.isLeft { Spacer() }
+                            HStack(spacing: 8) {
+                                Image(systemName: skip.isLeft ? "gobackward.10" : "goforward.10")
+                                    .font(.system(size: 20, weight: .bold))
+                                Text(skip.text)
+                                    .font(.system(size: 16, weight: .bold))
+                            }
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 12)
+                            .background(Color.black.opacity(0.85))
+                            .clipShape(Capsule())
+                            .padding(.horizontal, 50)
+                            .transition(.scale.combined(with: .opacity))
+                            if skip.isLeft { Spacer() }
                         }
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 12)
-                        .background(Color.black.opacity(0.85))
-                        .clipShape(Capsule())
-                        .padding(.horizontal, 50)
-                        .transition(.scale.combined(with: .opacity))
-                        if skip.isLeft { Spacer() }
                     }
-                }
 
-                // Volume HUD (Left, Halfway Down)
-                if showVolumeHUD {
-                    HStack {
-                        HStack(spacing: 8) {
-                            Image(systemName: "speaker.wave.3.fill")
-                                .font(.system(size: 15))
-                                .foregroundColor(.white)
-                            Text("Volume: \(Int(currentVolume * 100))%")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundColor(.white)
+                    // Volume HUD (Left side)
+                    if showVolumeHUD {
+                        HStack {
+                            HStack(spacing: 8) {
+                                Image(systemName: "speaker.wave.3.fill")
+                                    .font(.system(size: 15))
+                                    .foregroundColor(.white)
+                                Text("Volume: \(Int(currentVolume * 100))%")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundColor(.white)
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(Color.black.opacity(0.85))
+                            .clipShape(Capsule())
+                            .padding(.leading, 24)
+
+                            Spacer()
                         }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(Color.black.opacity(0.85))
-                        .clipShape(Capsule())
-                        .padding(.leading, 24)
-
-                        Spacer()
+                        .transition(.opacity)
                     }
-                    .transition(.opacity)
-                }
 
-                // Brightness HUD (Right, Halfway Down)
-                if showBrightnessHUD {
-                    HStack {
-                        Spacer()
-                        HStack(spacing: 8) {
-                            Image(systemName: "sun.max.fill")
-                                .font(.system(size: 15))
-                                .foregroundColor(.white)
-                            Text("Brightness: \(Int(currentBrightness * 100))%")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundColor(.white)
+                    // Brightness HUD (Right side)
+                    if showBrightnessHUD {
+                        HStack {
+                            Spacer()
+                            HStack(spacing: 8) {
+                                Image(systemName: "sun.max.fill")
+                                    .font(.system(size: 15))
+                                    .foregroundColor(.white)
+                                Text("Brightness: \(Int(currentBrightness * 100))%")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundColor(.white)
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(Color.black.opacity(0.85))
+                            .clipShape(Capsule())
+                            .padding(.trailing, 24)
                         }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(Color.black.opacity(0.85))
-                        .clipShape(Capsule())
-                        .padding(.trailing, 24)
+                        .transition(.opacity)
                     }
-                    .transition(.opacity)
-                }
 
-                // Aspect Ratio HUD (Top Center)
-                if showAspectHUD {
-                    VStack {
+                    // Aspect Ratio HUD (Center)
+                    if showAspectHUD {
                         HStack(spacing: 8) {
                             Image(systemName: "aspectratio")
                                 .font(.system(size: 15))
@@ -198,98 +216,96 @@ struct PlayerView: View {
                         .padding(.vertical, 8)
                         .background(Color.black.opacity(0.85))
                         .clipShape(Capsule())
-                        .padding(.top, 54)
                         .transition(.opacity)
-
-                        Spacer()
                     }
+
+                    Spacer()
                 }
+                .allowsHitTesting(false)
 
-            // Error Overlay with Back buttons
-            if let error = viewModel.error {
-                ZStack(alignment: .topLeading) {
-                    Color.black.ignoresSafeArea()
+                // 5. Error Overlay with Back / Retry
+                if let error = viewModel.error {
+                    ZStack(alignment: .topLeading) {
+                        Color.black.ignoresSafeArea()
 
-                    // Centered Error Card
-                    VStack {
-                        Spacer()
-                        VStack(spacing: 16) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .font(.system(size: 44))
-                                .foregroundColor(Color(hex: "FFB4AB"))
-                            Text(error)
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundColor(.white.opacity(0.9))
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal, 24)
+                        VStack {
+                            Spacer()
+                            VStack(spacing: 16) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .font(.system(size: 44))
+                                    .foregroundColor(Color(hex: "FFB4AB"))
+                                Text(error)
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(.white.opacity(0.9))
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal, 24)
 
-                            HStack(spacing: 14) {
-                                Button(action: {
-                                    dismiss()
-                                }) {
-                                    Text("Back")
-                                        .font(.system(size: 16, weight: .semibold))
-                                        .foregroundColor(.white.opacity(0.85))
-                                        .padding(.horizontal, 24)
-                                        .padding(.vertical, 12)
-                                        .background(Color.white.opacity(0.15))
-                                        .cornerRadius(24)
-                                }
-
-                                Button(action: {
-                                    viewModel.setup(fileId: fileId, fileSize: fileSize, fileName: fileName, client: client)
-                                }) {
-                                    HStack(spacing: 8) {
-                                        Image(systemName: "arrow.clockwise")
-                                        Text("Retry")
+                                HStack(spacing: 14) {
+                                    Button(action: {
+                                        dismiss()
+                                    }) {
+                                        Text("Back")
+                                            .font(.system(size: 16, weight: .semibold))
+                                            .foregroundColor(.white.opacity(0.85))
+                                            .padding(.horizontal, 24)
+                                            .padding(.vertical, 12)
+                                            .background(Color.white.opacity(0.15))
+                                            .cornerRadius(24)
                                     }
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 28)
-                                    .padding(.vertical, 12)
-                                    .background(Color(hex: "007AFF"))
-                                    .cornerRadius(24)
+
+                                    Button(action: {
+                                        viewModel.setup(fileId: fileId, fileSize: fileSize, fileName: fileName, client: client, isMKV: isMKV)
+                                    }) {
+                                        HStack(spacing: 8) {
+                                            Image(systemName: "arrow.clockwise")
+                                            Text("Retry")
+                                        }
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 28)
+                                        .padding(.vertical, 12)
+                                        .background(Color(hex: "007AFF"))
+                                        .cornerRadius(24)
+                                    }
                                 }
                             }
+                            .padding(24)
+                            .background(Color(hex: "1A1B1F"))
+                            .cornerRadius(20)
+                            .padding(.horizontal, 24)
+                            Spacer()
                         }
-                        .padding(24)
-                        .background(Color(hex: "1A1B1F"))
-                        .cornerRadius(20)
-                        .padding(.horizontal, 24)
-                        Spacer()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                        Button(action: {
+                            dismiss()
+                        }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "chevron.backward")
+                                    .font(.system(size: 16, weight: .bold))
+                                Text("Back")
+                                    .font(.system(size: 15, weight: .semibold))
+                            }
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(Color.white.opacity(0.18))
+                            .clipShape(Capsule())
+                        }
+                        .padding(.top, 56)
+                        .padding(.leading, 20)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                    // Top-left Back button
-                    Button(action: {
-                        dismiss()
-                    }) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "chevron.backward")
-                                .font(.system(size: 16, weight: .bold))
-                            Text("Back")
-                                .font(.system(size: 15, weight: .semibold))
-                        }
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(Color.white.opacity(0.18))
-                        .clipShape(Capsule())
-                    }
-                    .padding(.top, 56)
-                    .padding(.leading, 20)
+                    .transition(.opacity)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .transition(.opacity)
-            }
 
-                // Custom Player Controls Overlay
+                // 6. Custom Player Controls Overlay (For BOTH MKV and MP4/MOV)
                 if viewModel.showControls && viewModel.error == nil {
                     playerControlsOverlay
                         .transition(.opacity)
                 }
 
-                // Auto-next countdown overlay
+                // 7. Auto-next countdown overlay
                 if viewModel.showAutoNextCountdown {
                     autoNextOverlay
                         .transition(.scale.combined(with: .opacity))
@@ -309,9 +325,7 @@ struct PlayerView: View {
             viewModel.videoDuration = duration
             viewModel.thumbnailFileId = thumbnailFileId
             viewModel.allVideos = allVideos
-            if !isMKV {
-                viewModel.setup(fileId: fileId, fileSize: fileSize, fileName: fileName, client: client)
-            }
+            viewModel.setup(fileId: fileId, fileSize: fileSize, fileName: fileName, client: client, isMKV: isMKV)
             AppSettings.shared.savePosition(
                 fileId: fileId,
                 fileSize: fileSize,
@@ -324,10 +338,8 @@ struct PlayerView: View {
             )
         }
         .onDisappear {
-            if !isMKV {
-                viewModel.savePosition()
-                viewModel.teardown()
-            }
+            viewModel.savePosition()
+            viewModel.teardown()
         }
     }
 
@@ -394,7 +406,7 @@ struct PlayerView: View {
             .allowsHitTesting(false)
 
             VStack(spacing: 0) {
-                // Top Bar
+                // Top Bar (padded 52pt to strictly avoid Dynamic Island / notch)
                 HStack(spacing: 12) {
                     Button(action: {
                         viewModel.savePosition()
@@ -429,7 +441,7 @@ struct PlayerView: View {
                         if viewModel.audioTrackOptions.isEmpty {
                             Text("Default Audio Track")
                         } else {
-                            ForEach(viewModel.audioTrackOptions, id: \.id) { audio in
+                            ForEach(viewModel.audioTrackOptions) { audio in
                                 Button(action: { viewModel.selectAudioTrack(id: audio.id) }) {
                                     HStack {
                                         Text(audio.name)
@@ -454,7 +466,7 @@ struct PlayerView: View {
                         if viewModel.subtitleOptions.isEmpty {
                             Text("No Subtitles Available")
                         } else {
-                            ForEach(viewModel.subtitleOptions, id: \.id) { sub in
+                            ForEach(viewModel.subtitleOptions) { sub in
                                 Button(action: { viewModel.selectSubtitle(id: sub.id) }) {
                                     HStack {
                                         Text(sub.name)
@@ -496,7 +508,7 @@ struct PlayerView: View {
                             .clipShape(Capsule())
                     }
 
-                    // Aspect Ratio Button
+                    // Aspect Ratio Button (Avoid Dynamic Island vs Fill Dynamic Island)
                     Button(action: {
                         viewModel.toggleAspect()
                         triggerAspectHUD()
@@ -574,20 +586,16 @@ struct PlayerView: View {
 
                 // Bottom Scrubber Bar
                 VStack(spacing: 8) {
-                    // Custom Scrubber Slider
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {
-                            // Track background
                             RoundedRectangle(cornerRadius: 3)
                                 .fill(Color.white.opacity(0.3))
                                 .frame(height: 6)
 
-                            // Progress
                             RoundedRectangle(cornerRadius: 3)
                                 .fill(Color(hex: "007AFF"))
                                 .frame(width: max(0, min(geo.size.width * viewModel.scrubberProgress, geo.size.width)), height: 6)
 
-                            // Thumb
                             Circle()
                                 .fill(Color.white)
                                 .frame(width: 16, height: 16)
@@ -613,7 +621,6 @@ struct PlayerView: View {
                     }
                     .frame(height: 20)
 
-                    // Time labels
                     HStack {
                         Text(formatTime(Int(viewModel.currentPosition)))
                             .font(.system(size: 13, weight: .medium, design: .monospaced))
@@ -696,9 +703,9 @@ class PlayerViewModel: ObservableObject {
     @Published var playbackRate: Float = 1.0
     @Published var videoGravity: AVLayerVideoGravity = .resizeAspect
     @Published var selectedSubtitleId: String = "off"
-    @Published var subtitleOptions: [(id: String, name: String, group: AVMediaSelectionGroup, option: AVMediaSelectionOption?)] = []
+    @Published var subtitleOptions: [MediaOptionItem] = []
     @Published var selectedAudioTrackId: String = "default"
-    @Published var audioTrackOptions: [(id: String, name: String, group: AVMediaSelectionGroup, option: AVMediaSelectionOption?)] = []
+    @Published var audioTrackOptions: [MediaOptionItem] = []
     @Published var availableRates: [Float] = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 3.0]
 
     @Published var hasPrevious = false
@@ -706,12 +713,18 @@ class PlayerViewModel: ObservableObject {
     @Published var showAutoNextCountdown = false
     @Published var autoNextSeconds = 5
 
+    var isMKV: Bool = false
+
+    // AVPlayer components
     let player = AVPlayer()
-    private var loaderDelegate: TDResourceLoaderDelegate?
     private var statusObserver: NSKeyValueObservation?
     private var timeControlObserver: NSKeyValueObservation?
     private var timeObserver: Any?
     private var endObserver: NSObjectProtocol?
+
+    // KSPlayer components
+    weak var ksPlayerView: IOSVideoPlayerView?
+
     private var autoNextTimer: Timer?
     private var controlsTimer: Timer?
 
@@ -728,19 +741,21 @@ class PlayerViewModel: ObservableObject {
 
     private var previousFileId: Int?
     private var nextFileId: Int?
+    private var lastSaveTime: Double = 0
 
     var scrubberProgress: Double {
         guard totalDuration > 0 else { return 0 }
         return min(max(currentPosition / totalDuration, 0.0), 1.0)
     }
 
-    func setup(fileId: Int, fileSize: Int64, fileName: String, client: TelegramClient) {
-        isLoading = true
-        error = nil
-        currentFileId = fileId
-        currentFileName = fileName
-        currentFileSize = fileSize
-        currentClient = client
+    func setup(fileId: Int, fileSize: Int64, fileName: String, client: TelegramClient, isMKV: Bool) {
+        self.isMKV = isMKV
+        self.isLoading = true
+        self.error = nil
+        self.currentFileId = fileId
+        self.currentFileName = fileName
+        self.currentFileSize = fileSize
+        self.currentClient = client
 
         // Detect neighbors
         let videoList = allVideos.map { (fileId: $0.fileId, fileName: $0.fileName) }
@@ -752,56 +767,115 @@ class PlayerViewModel: ObservableObject {
 
         LocalStreamServer.shared.start(with: client)
         let streamURL = LocalStreamServer.shared.streamURL(fileId: fileId, fileSize: fileSize, fileName: fileName)
-        let asset = AVURLAsset(url: streamURL)
-        let playerItem = AVPlayerItem(asset: asset)
 
-        statusObserver = playerItem.observe(\.status) { [weak self] item, _ in
+        if isMKV {
+            // Handled via KSVideoPlayerSurfaceView & bindKSPlayer
+        } else {
+            let asset = AVURLAsset(url: streamURL)
+            let playerItem = AVPlayerItem(asset: asset)
+
+            statusObserver = playerItem.observe(\.status) { [weak self] item, _ in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    switch item.status {
+                    case .readyToPlay:
+                        self.isLoading = false
+                        let dur = item.duration.seconds
+                        if dur.isFinite && dur > 0 {
+                            self.totalDuration = dur
+                            self.videoDuration = Int(dur)
+                        }
+                        self.loadAVSubtitles(for: item)
+                        self.loadAVAudioTracks(for: item)
+                        self.restorePosition()
+                        self.player.playImmediately(atRate: self.playbackRate)
+                        self.isPlaying = true
+                        self.resetControlsTimer()
+                    case .failed:
+                        self.isLoading = false
+                        self.error = item.error?.localizedDescription ?? "Cannot open video"
+                    default:
+                        break
+                    }
+                }
+            }
+
+            timeControlObserver = player.observe(\.timeControlStatus) { [weak self] p, _ in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    switch p.timeControlStatus {
+                    case .playing:
+                        self.isPlaying = true
+                        self.isLoading = false
+                    case .paused:
+                        self.isPlaying = false
+                    case .waitingToPlayAtSpecifiedRate:
+                        self.isLoading = true
+                    @unknown default:
+                        break
+                    }
+                }
+            }
+
+            player.replaceCurrentItem(with: playerItem)
+            setupAVPositionTracking()
+            setupAVEndObserver(for: playerItem)
+        }
+        resetControlsTimer()
+    }
+
+    func bindKSPlayer(playerView: IOSVideoPlayerView, url: URL, title: String) {
+        self.ksPlayerView = playerView
+        self.isLoading = true
+        self.error = nil
+
+        playerView.playTimeDidChange = { [weak self] current, total in
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                switch item.status {
+                if !self.isScrubbing {
+                    self.currentPosition = current
+                }
+                if total > 0 && self.totalDuration <= 0 {
+                    self.totalDuration = total
+                    self.videoDuration = Int(total)
+                }
+                if abs(self.currentPosition - self.lastSaveTime) >= 5.0 {
+                    self.lastSaveTime = self.currentPosition
+                    self.savePosition()
+                }
+            }
+        }
+
+        playerView.stateDidChange = { [weak self] state in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                switch state {
                 case .readyToPlay:
                     self.isLoading = false
-                    let dur = item.duration.seconds
-                    if dur.isFinite && dur > 0 {
-                        self.totalDuration = dur
-                        self.videoDuration = Int(dur)
-                    }
-                    self.loadSubtitles(for: item)
-                    self.loadAudioTracks(for: item)
-                    self.restorePosition()
-                    self.player.playImmediately(atRate: self.playbackRate)
                     self.isPlaying = true
+                    self.loadKSTracks()
+                    self.restorePosition()
                     self.resetControlsTimer()
-                case .failed:
+                case .buffering:
+                    self.isLoading = true
+                case .bufferFinished:
                     self.isLoading = false
-                    self.error = item.error?.localizedDescription ?? "Cannot open video"
+                case .playedToTheEnd:
+                    self.isPlaying = false
+                    if self.hasNext && AppSettings.shared.autoNextEpisode {
+                        self.startAutoNextCountdown()
+                    }
+                case .error:
+                    self.isLoading = false
+                    self.error = "Cannot open video"
                 default:
                     break
                 }
             }
         }
 
-        timeControlObserver = player.observe(\.timeControlStatus) { [weak self] p, _ in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                switch p.timeControlStatus {
-                case .playing:
-                    self.isPlaying = true
-                    self.isLoading = false
-                case .paused:
-                    self.isPlaying = false
-                case .waitingToPlayAtSpecifiedRate:
-                    self.isLoading = true
-                @unknown default:
-                    break
-                }
-            }
-        }
-
-        player.replaceCurrentItem(with: playerItem)
-        setupPositionTracking()
-        setupEndObserver(for: playerItem)
-        resetControlsTimer()
+        let resource = KSPlayerResource(url: url, options: KSOptions(), name: title)
+        playerView.set(resource: resource)
     }
 
     func toggleControlsVisibility() {
@@ -829,10 +903,18 @@ class PlayerViewModel: ObservableObject {
 
     func togglePlayPause() {
         if isPlaying {
-            player.pause()
+            if isMKV {
+                ksPlayerView?.playerLayer?.player.pause()
+            } else {
+                player.pause()
+            }
             isPlaying = false
         } else {
-            player.playImmediately(atRate: playbackRate)
+            if isMKV {
+                ksPlayerView?.playerLayer?.player.play()
+            } else {
+                player.playImmediately(atRate: playbackRate)
+            }
             isPlaying = true
         }
         resetControlsTimer()
@@ -841,18 +923,25 @@ class PlayerViewModel: ObservableObject {
     func setPlaybackRate(_ rate: Float) {
         playbackRate = rate
         if isPlaying {
-            player.rate = rate
+            if isMKV {
+                ksPlayerView?.playerLayer?.player.playbackRate = rate
+            } else {
+                player.rate = rate
+            }
         }
         resetControlsTimer()
     }
 
     func toggleAspect() {
         videoGravity = (videoGravity == .resizeAspect) ? .resizeAspectFill : .resizeAspect
+        if isMKV {
+            ksPlayerView?.playerLayer?.videoGravity = videoGravity
+        }
         resetControlsTimer()
     }
 
     func seekRelative(seconds: Double) {
-        let current = player.currentTime().seconds
+        let current = isMKV ? currentPosition : player.currentTime().seconds
         let target = max(0, min(current + seconds, totalDuration > 0 ? totalDuration : current + seconds))
         seek(to: target)
         resetControlsTimer()
@@ -860,28 +949,38 @@ class PlayerViewModel: ObservableObject {
 
     func seek(to seconds: Double) {
         currentPosition = seconds
-        let time = CMTime(seconds: seconds, preferredTimescale: 600)
-        player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                if self.isPlaying {
-                    self.player.rate = self.playbackRate
+        if isMKV {
+            ksPlayerView?.playerLayer?.player.seek(time: seconds) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    if self.isPlaying {
+                        self.ksPlayerView?.playerLayer?.player.playbackRate = self.playbackRate
+                    }
+                }
+            }
+        } else {
+            let time = CMTime(seconds: seconds, preferredTimescale: 600)
+            player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    if self.isPlaying {
+                        self.player.rate = self.playbackRate
+                    }
                 }
             }
         }
     }
 
-    func loadSubtitles(for item: AVPlayerItem) {
+    func loadAVSubtitles(for item: AVPlayerItem) {
         guard let group = item.asset.mediaSelectionGroup(forMediaCharacteristic: .legible) else {
             subtitleOptions = []
             return
         }
-        var list: [(id: String, name: String, group: AVMediaSelectionGroup, option: AVMediaSelectionOption?)] = [
-            (id: "off", name: "Off", group: group, option: nil)
+        var list: [MediaOptionItem] = [
+            MediaOptionItem(id: "off", name: "Off", avOption: nil, avGroup: group)
         ]
         for option in group.options {
-            let name = option.displayName
-            list.append((id: option.displayName, name: name, group: group, option: option))
+            list.append(MediaOptionItem(id: option.displayName, name: option.displayName, avOption: option, avGroup: group))
         }
         self.subtitleOptions = list
         if let current = item.currentMediaSelection.selectedMediaOption(in: group) {
@@ -891,28 +990,61 @@ class PlayerViewModel: ObservableObject {
         }
     }
 
+    func loadKSTracks() {
+        guard let player = ksPlayerView?.playerLayer?.player else { return }
+
+        // Audio Tracks
+        let audioTracks = player.tracks(mediaType: .audio)
+        var aList: [MediaOptionItem] = []
+        for (idx, track) in audioTracks.enumerated() {
+            let name = track.name.isEmpty ? (track.language ?? "Audio Track \(idx + 1)") : track.name
+            aList.append(MediaOptionItem(id: "audio_\(idx)", name: name, ksTrack: track))
+        }
+        self.audioTrackOptions = aList
+        if let first = aList.first {
+            self.selectedAudioTrackId = first.id
+        }
+
+        // Subtitles
+        let subTracks = player.tracks(mediaType: .subtitle)
+        var sList: [MediaOptionItem] = [
+            MediaOptionItem(id: "off", name: "Off", ksTrack: nil)
+        ]
+        for (idx, track) in subTracks.enumerated() {
+            let name = track.name.isEmpty ? (track.language ?? "Subtitle \(idx + 1)") : track.name
+            sList.append(MediaOptionItem(id: "sub_\(idx)", name: name, ksTrack: track))
+        }
+        self.subtitleOptions = sList
+        self.selectedSubtitleId = "off"
+    }
+
     func selectSubtitle(id: String) {
         selectedSubtitleId = id
         guard let selected = subtitleOptions.first(where: { $0.id == id }) else { return }
-        if let currentItem = player.currentItem {
-            if let opt = selected.option {
-                currentItem.select(opt, in: selected.group)
-            } else {
-                currentItem.select(nil, in: selected.group)
+        if isMKV {
+            if let track = selected.ksTrack {
+                ksPlayerView?.playerLayer?.player.select(track: track)
+            }
+        } else {
+            if let currentItem = player.currentItem, let group = selected.avGroup {
+                if let opt = selected.avOption {
+                    currentItem.select(opt, in: group)
+                } else {
+                    currentItem.select(nil, in: group)
+                }
             }
         }
         resetControlsTimer()
     }
 
-    func loadAudioTracks(for item: AVPlayerItem) {
+    func loadAVAudioTracks(for item: AVPlayerItem) {
         guard let group = item.asset.mediaSelectionGroup(forMediaCharacteristic: .audible) else {
             audioTrackOptions = []
             return
         }
-        var list: [(id: String, name: String, group: AVMediaSelectionGroup, option: AVMediaSelectionOption?)] = []
+        var list: [MediaOptionItem] = []
         for option in group.options {
-            let name = option.displayName
-            list.append((id: option.displayName, name: name, group: group, option: option))
+            list.append(MediaOptionItem(id: option.displayName, name: option.displayName, avOption: option, avGroup: group))
         }
         self.audioTrackOptions = list
         if let current = item.currentMediaSelection.selectedMediaOption(in: group) {
@@ -923,9 +1055,13 @@ class PlayerViewModel: ObservableObject {
     func selectAudioTrack(id: String) {
         selectedAudioTrackId = id
         guard let selected = audioTrackOptions.first(where: { $0.id == id }) else { return }
-        if let currentItem = player.currentItem {
-            if let opt = selected.option {
-                currentItem.select(opt, in: selected.group)
+        if isMKV {
+            if let track = selected.ksTrack {
+                ksPlayerView?.playerLayer?.player.select(track: track)
+            }
+        } else {
+            if let currentItem = player.currentItem, let group = selected.avGroup, let opt = selected.avOption {
+                currentItem.select(opt, in: group)
             }
         }
         resetControlsTimer()
@@ -935,25 +1071,29 @@ class PlayerViewModel: ObservableObject {
         controlsTimer?.invalidate()
         controlsTimer = nil
         cancelAutoNext()
-        player.pause()
-        player.replaceCurrentItem(with: nil)
-        statusObserver?.invalidate()
-        statusObserver = nil
-        timeControlObserver?.invalidate()
-        timeControlObserver = nil
-        if let obs = timeObserver {
-            player.removeTimeObserver(obs)
-            timeObserver = nil
+        if isMKV {
+            ksPlayerView?.playerLayer?.player.pause()
+            ksPlayerView = nil
+        } else {
+            player.pause()
+            player.replaceCurrentItem(with: nil)
+            statusObserver?.invalidate()
+            statusObserver = nil
+            timeControlObserver?.invalidate()
+            timeControlObserver = nil
+            if let obs = timeObserver {
+                player.removeTimeObserver(obs)
+                timeObserver = nil
+            }
+            if let obs = endObserver {
+                NotificationCenter.default.removeObserver(obs)
+                endObserver = nil
+            }
         }
-        if let obs = endObserver {
-            NotificationCenter.default.removeObserver(obs)
-            endObserver = nil
-        }
-        loaderDelegate = nil
     }
 
     func savePosition() {
-        let currentTime = player.currentTime().seconds
+        let currentTime = isMKV ? currentPosition : player.currentTime().seconds
         let pos = (currentTime.isFinite && currentTime > 0) ? currentTime : (AppSettings.shared.playbackPositions[currentFileId] ?? 0)
         AppSettings.shared.savePosition(
             fileId: currentFileId,
@@ -973,7 +1113,9 @@ class PlayerViewModel: ObservableObject {
               let client = currentClient else { return }
         cancelAutoNext()
         teardown()
-        setup(fileId: video.fileId, fileSize: video.fileSize, fileName: video.fileName, client: client)
+        let ext = (video.fileName as NSString).pathExtension.lowercased()
+        let isM = ext == "mkv" || ext == "avi" || ext == "webm" || ext == "flv" || ext == "wmv" || ext == "ts"
+        setup(fileId: video.fileId, fileSize: video.fileSize, fileName: video.fileName, client: client, isMKV: isM)
     }
 
     func playNext() {
@@ -982,7 +1124,9 @@ class PlayerViewModel: ObservableObject {
               let client = currentClient else { return }
         cancelAutoNext()
         teardown()
-        setup(fileId: video.fileId, fileSize: video.fileSize, fileName: video.fileName, client: client)
+        let ext = (video.fileName as NSString).pathExtension.lowercased()
+        let isM = ext == "mkv" || ext == "avi" || ext == "webm" || ext == "flv" || ext == "wmv" || ext == "ts"
+        setup(fileId: video.fileId, fileSize: video.fileSize, fileName: video.fileName, client: client, isMKV: isM)
     }
 
     func cancelAutoNext() {
@@ -991,18 +1135,20 @@ class PlayerViewModel: ObservableObject {
         showAutoNextCountdown = false
     }
 
-    private var lastSaveTime: Double = 0
-
     private func restorePosition() {
         if let saved = AppSettings.shared.playbackPositions[currentFileId], saved > 3 {
-            let time = CMTime(seconds: saved, preferredTimescale: 600)
-            player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
+            if isMKV {
+                ksPlayerView?.playerLayer?.player.seek(time: saved) { _ in }
+            } else {
+                let time = CMTime(seconds: saved, preferredTimescale: 600)
+                player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
+            }
             currentPosition = saved
             lastSaveTime = saved
         }
     }
 
-    private func setupPositionTracking() {
+    private func setupAVPositionTracking() {
         let interval = CMTime(seconds: 0.5, preferredTimescale: 600)
         timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             Task { @MainActor [weak self] in
@@ -1024,7 +1170,7 @@ class PlayerViewModel: ObservableObject {
         }
     }
 
-    private func setupEndObserver(for item: AVPlayerItem) {
+    private func setupAVEndObserver(for item: AVPlayerItem) {
         if let obs = endObserver {
             NotificationCenter.default.removeObserver(obs)
             endObserver = nil
@@ -1058,67 +1204,47 @@ class PlayerViewModel: ObservableObject {
             }
         }
     }
-
-    private func mimeTypeFor(fileName: String) -> String {
-        let ext = URL(fileURLWithPath: fileName).pathExtension.lowercased()
-        switch ext {
-        case "mkv": return "video/x-matroska"
-        case "avi": return "video/x-msvideo"
-        case "ts": return "video/mp2t"
-        case "mov": return "video/quicktime"
-        case "m4v": return "video/x-m4v"
-        case "mp4": return "video/mp4"
-        default: return "video/mp4"
-        }
-    }
 }
 
-import MediaPlayer
-
-// Custom video player using AVPlayerLayer with gesture coordinator
-struct CustomVideoPlayerView: UIViewRepresentable {
-    let player: AVPlayer
-    let videoGravity: AVLayerVideoGravity
+// Transparent gesture coordinator overlay
+struct GestureOverlayView: UIViewRepresentable {
     var onToggleAspect: (() -> Void)? = nil
     var onSeekRelative: ((Double) -> Void)? = nil
     var onVolumeChanged: ((Float) -> Void)? = nil
     var onBrightnessChanged: ((CGFloat) -> Void)? = nil
     var onToggleControls: (() -> Void)? = nil
 
-    func makeUIView(context: Context) -> PlayerUIView {
-        let view = PlayerUIView()
-        view.playerLayer.player = player
-        view.playerLayer.videoGravity = videoGravity
-        view.backgroundColor = .black
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.backgroundColor = .clear
 
         let coordinator = context.coordinator
-        coordinator.player = player
         coordinator.onToggleAspect = onToggleAspect
         coordinator.onSeekRelative = onSeekRelative
         coordinator.onVolumeChanged = onVolumeChanged
         coordinator.onBrightnessChanged = onBrightnessChanged
         coordinator.onToggleControls = onToggleControls
 
-        // 1. Pinch for Zoom to Fill / Aspect Fit
-        let pinch = UIPinchGestureRecognizer(target: coordinator, action: #selector(PlayerCoordinator.handlePinch(_:)))
+        // 1. Pinch
+        let pinch = UIPinchGestureRecognizer(target: coordinator, action: #selector(GestureCoordinator.handlePinch(_:)))
         pinch.delegate = coordinator
         view.addGestureRecognizer(pinch)
 
-        // 2. Double Tap for -10s / +10s
-        let doubleTap = UITapGestureRecognizer(target: coordinator, action: #selector(PlayerCoordinator.handleDoubleTap(_:)))
+        // 2. Double Tap
+        let doubleTap = UITapGestureRecognizer(target: coordinator, action: #selector(GestureCoordinator.handleDoubleTap(_:)))
         doubleTap.numberOfTapsRequired = 2
         doubleTap.delegate = coordinator
         view.addGestureRecognizer(doubleTap)
 
-        // 3. Single Tap for Controls Toggle
-        let singleTap = UITapGestureRecognizer(target: coordinator, action: #selector(PlayerCoordinator.handleSingleTap(_:)))
+        // 3. Single Tap
+        let singleTap = UITapGestureRecognizer(target: coordinator, action: #selector(GestureCoordinator.handleSingleTap(_:)))
         singleTap.numberOfTapsRequired = 1
         singleTap.delegate = coordinator
         singleTap.require(toFail: doubleTap)
         view.addGestureRecognizer(singleTap)
 
-        // 4. Pan for Volume (Left) & Brightness (Right)
-        let pan = UIPanGestureRecognizer(target: coordinator, action: #selector(PlayerCoordinator.handlePan(_:)))
+        // 4. Pan for Volume & Brightness
+        let pan = UIPanGestureRecognizer(target: coordinator, action: #selector(GestureCoordinator.handlePan(_:)))
         pan.delegate = coordinator
         view.addGestureRecognizer(pan)
 
@@ -1127,540 +1253,96 @@ struct CustomVideoPlayerView: UIViewRepresentable {
         return view
     }
 
-    func updateUIView(_ uiView: PlayerUIView, context: Context) {
-        uiView.playerLayer.player = player
-        uiView.playerLayer.videoGravity = videoGravity
-    }
+    func updateUIView(_ uiView: UIView, context: Context) {}
 
-    func makeCoordinator() -> PlayerCoordinator {
-        PlayerCoordinator()
-    }
-
-    class PlayerCoordinator: NSObject, UIGestureRecognizerDelegate {
-        weak var player: AVPlayer?
-        var onToggleAspect: (() -> Void)?
-        var onSeekRelative: ((Double) -> Void)?
-        var onVolumeChanged: ((Float) -> Void)?
-        var onBrightnessChanged: ((CGFloat) -> Void)?
-        var onToggleControls: (() -> Void)?
-
-        private let volumeView = MPVolumeView(frame: CGRect(x: -1000, y: -1000, width: 1, height: 1))
-        private var volumeSlider: UISlider?
-        private var initialVolume: Float = 0
-        private var initialBrightness: CGFloat = 0
-        private var panSide: PanSide = .none
-
-        enum PanSide {
-            case none
-            case leftVolume
-            case rightBrightness
-        }
-
-        func setupVolumeView(in view: UIView) {
-            volumeView.alpha = 0.0001
-            volumeView.clipsToBounds = true
-            view.addSubview(volumeView)
-            for sub in volumeView.subviews {
-                if let slider = sub as? UISlider {
-                    self.volumeSlider = slider
-                    break
-                }
-            }
-        }
-
-        @objc func handleSingleTap(_ gesture: UITapGestureRecognizer) {
-            onToggleControls?()
-        }
-
-        @objc func handlePinch(_ gesture: UIPinchGestureRecognizer) {
-            guard gesture.state == .ended else { return }
-            if gesture.scale > 1.15 || gesture.scale < 0.85 {
-                onToggleAspect?()
-            }
-        }
-
-        @objc func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
-            guard let view = gesture.view else { return }
-            let location = gesture.location(in: view)
-            let isLeft = location.x < view.bounds.width / 2
-            let delta: Double = isLeft ? -10.0 : 10.0
-            onSeekRelative?(delta)
-        }
-
-        @objc func handlePan(_ gesture: UIPanGestureRecognizer) {
-            guard let view = gesture.view else { return }
-            let location = gesture.location(in: view)
-            let translation = gesture.translation(in: view)
-            let velocity = gesture.velocity(in: view)
-
-            switch gesture.state {
-            case .began:
-                if abs(velocity.y) > abs(velocity.x) {
-                    if location.x < view.bounds.width / 2 {
-                        panSide = .leftVolume
-                        initialVolume = AVAudioSession.sharedInstance().outputVolume
-                    } else {
-                        panSide = .rightBrightness
-                        initialBrightness = UIScreen.main.brightness
-                    }
-                }
-            case .changed:
-                let delta = -Float(translation.y / (view.bounds.height * 0.55))
-                if panSide == .leftVolume {
-                    let newVol = max(0, min(1.0, initialVolume + delta))
-                    volumeSlider?.value = newVol
-                    onVolumeChanged?(newVol)
-                } else if panSide == .rightBrightness {
-                    let newBright = max(0, min(1.0, Float(initialBrightness) + delta))
-                    UIScreen.main.brightness = CGFloat(newBright)
-                    onBrightnessChanged?(CGFloat(newBright))
-                }
-            case .ended, .cancelled:
-                panSide = .none
-            default:
-                break
-            }
-        }
-
-        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
-            return false
-        }
+    func makeCoordinator() -> GestureCoordinator {
+        GestureCoordinator()
     }
 }
 
-class PlayerUIView: UIView {
-    override class var layerClass: AnyClass { AVPlayerLayer.self }
-    var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
-}
+class GestureCoordinator: NSObject, UIGestureRecognizerDelegate {
+    var onToggleAspect: (() -> Void)?
+    var onSeekRelative: ((Double) -> Void)?
+    var onVolumeChanged: ((Float) -> Void)?
+    var onBrightnessChanged: ((CGFloat) -> Void)?
+    var onToggleControls: (() -> Void)?
 
-struct KSVideoPlayerRepresentable: UIViewRepresentable {
-    let url: URL
-    let title: String
-    let fileId: Int
-    let fileSize: Int64
-    let chatId: Int64
-    let chatTitle: String
-    let duration: Int
-    let thumbnailFileId: Int?
-    var onDismiss: () -> Void
-
-    func makeUIView(context: Context) -> KSVideoPlayerContainerView {
-        KSOptions.firstPlayerType = KSMEPlayer.self
-        KSOptions.secondPlayerType = KSMEPlayer.self
-        KSOptions.canBackgroundPlay = true
-        KSOptions.isAutoPlay = true
-        KSOptions.isSeekedAutoPlay = true
-
-        let container = KSVideoPlayerContainerView()
-        container.fileId = fileId
-        container.fileSize = fileSize
-        container.fileName = title
-        container.chatId = chatId
-        container.chatTitle = chatTitle
-        container.duration = duration
-        container.thumbnailFileId = thumbnailFileId
-        container.savedPos = AppSettings.shared.playbackPositions[fileId] ?? 0
-        container.onDismiss = onDismiss
-        container.configure(url: url, title: title)
-
-        return container
-    }
-
-    func updateUIView(_ uiView: KSVideoPlayerContainerView, context: Context) {}
-}
-
-final class KSVideoPlayerContainerView: UIView, UIGestureRecognizerDelegate {
-    let player = IOSVideoPlayerView()
     private let volumeView = MPVolumeView(frame: CGRect(x: -1000, y: -1000, width: 1, height: 1))
     private var volumeSlider: UISlider?
-    private var hudView: UIView?
-
-    var fileId: Int = 0
-    var fileSize: Int64 = 0
-    var fileName: String = ""
-    var chatId: Int64 = 0
-    var chatTitle: String = ""
-    var duration: Int = 0
-    var thumbnailFileId: Int? = nil
-    var savedPos: Double = 0
-    var onDismiss: (() -> Void)?
-
-    private var hasSeekedToSavedPos = false
-    private var lastTime: Double = 0
-    private var lastDuration: Double = 0
-
-    // 3 Aspect Ratio Options
-    enum AspectMode: Int, CaseIterable {
-        case fit = 0        // Avoid Dynamic Island / Original Aspect Ratio
-        case fitWidth = 1   // Fit to Width (100% display width under Dynamic Island)
-        case fitHeight = 2  // Fit to Height
-
-        var title: String {
-            switch self {
-            case .fit: return "Original (Avoid Dynamic Island)"
-            case .fitWidth: return "Fit to Width (Fill Dynamic Island)"
-            case .fitHeight: return "Fit to Height"
-            }
-        }
-
-        var scale: CGFloat {
-            switch self {
-            case .fit: return 1.0
-            case .fitWidth: return 1.28
-            case .fitHeight: return 1.14
-            }
-        }
-    }
-    private var currentAspectMode: AspectMode = .fit
-
-    // Pan tracking for Volume (Left), Brightness (Right), and Horizontal Seeking
-    private var panSide: PanSide = .none
     private var initialVolume: Float = 0
     private var initialBrightness: CGFloat = 0
-    private var initialSeekTime: Double = 0
+    private var panSide: PanSide = .none
 
     enum PanSide {
         case none
         case leftVolume
         case rightBrightness
-        case seekHorizontal
     }
 
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        setupViews()
-    }
-
-    required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        setupViews()
-    }
-
-    private func setupViews() {
-        backgroundColor = .black
-        clipsToBounds = true
-
-        // 1. Player View constrained to safeAreaLayoutGuide so title & back button NEVER hit Dynamic Island
-        player.contentMode = .scaleAspectFit
-        player.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(player)
-
-        NSLayoutConstraint.activate([
-            player.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor),
-            player.leadingAnchor.constraint(equalTo: safeAreaLayoutGuide.leadingAnchor),
-            player.trailingAnchor.constraint(equalTo: safeAreaLayoutGuide.trailingAnchor),
-            player.bottomAnchor.constraint(equalTo: safeAreaLayoutGuide.bottomAnchor)
-        ])
-
-        // 2. Volume View for system volume control
+    func setupVolumeView(in view: UIView) {
         volumeView.alpha = 0.0001
         volumeView.clipsToBounds = true
-        addSubview(volumeView)
+        view.addSubview(volumeView)
         for sub in volumeView.subviews {
             if let slider = sub as? UISlider {
                 self.volumeSlider = slider
                 break
             }
         }
+    }
 
-        // 3. Gestures attached directly to player view
-        let pinch = UIPinchGestureRecognizer(target: self, action: #selector(handlePinch(_:)))
-        pinch.delegate = self
-        player.addGestureRecognizer(pinch)
+    @objc func handleSingleTap(_ gesture: UITapGestureRecognizer) {
+        onToggleControls?()
+    }
 
-        let doubleTap = UITapGestureRecognizer(target: self, action: #selector(handleDoubleTap(_:)))
-        doubleTap.numberOfTapsRequired = 2
-        doubleTap.delegate = self
-        player.addGestureRecognizer(doubleTap)
-
-        let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
-        pan.delegate = self
-        player.addGestureRecognizer(pan)
-
-        // Disable KSPlayer internal pan gestures so custom Left=Volume, Right=Brightness has 100% priority
-        for g in player.gestureRecognizers ?? [] {
-            if g is UIPanGestureRecognizer && g != pan {
-                g.isEnabled = false
-            }
-            if let tap = g as? UITapGestureRecognizer, tap != doubleTap && tap.numberOfTapsRequired == 1 {
-                tap.require(toFail: doubleTap)
-            }
-        }
-
-        DispatchQueue.main.async { [weak self, weak doubleTap] in
-            guard let self = self, let doubleTap = doubleTap else { return }
-            for g in self.player.gestureRecognizers ?? [] {
-                if g is UIPanGestureRecognizer && g != pan {
-                    g.isEnabled = false
-                }
-                if let tap = g as? UITapGestureRecognizer, tap != doubleTap && tap.numberOfTapsRequired == 1 {
-                    tap.require(toFail: doubleTap)
-                }
-            }
+    @objc func handlePinch(_ gesture: UIPinchGestureRecognizer) {
+        guard gesture.state == .ended else { return }
+        if gesture.scale > 1.15 || gesture.scale < 0.85 {
+            onToggleAspect?()
         }
     }
 
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        // Remove fullscreen button on the bottom right of toolbar
-        for sub in player.toolBar.subviews {
-            if let btn = sub as? UIButton, btn.frame.origin.x > player.toolBar.bounds.width * 0.75 {
-                btn.isHidden = true
-                btn.alpha = 0
-            }
-        }
-    }
-
-    func configure(url: URL, title: String) {
-        player.backBlock = { [weak self] in
-            self?.savePosition()
-            self?.onDismiss?()
-        }
-
-        player.playTimeDidChange = { [weak self] current, total in
-            self?.handleTimeChange(current: current, total: total)
-        }
-
-        let resource = KSPlayerResource(url: url, options: KSOptions(), name: title)
-        player.set(resource: resource)
-    }
-
-    func handleTimeChange(current: TimeInterval, total: TimeInterval) {
-        lastTime = current
-        if total > 0 { lastDuration = total }
-
-        if !hasSeekedToSavedPos && savedPos > 3 && (total == 0 || savedPos < total - 5) {
-            hasSeekedToSavedPos = true
-            player.playerLayer?.player.seek(time: savedPos) { _ in }
-        }
-
-        if Int(current) > 0 && Int(current) % 5 == 0 {
-            savePosition()
-        }
-    }
-
-    func savePosition() {
-        guard fileId != 0 && lastTime > 0 else { return }
-        DispatchQueue.main.async { [self] in
-            AppSettings.shared.savePosition(
-                fileId: fileId,
-                fileSize: fileSize,
-                position: lastTime,
-                fileName: fileName,
-                chatId: chatId,
-                chatTitle: chatTitle,
-                duration: Int(lastDuration > 0 ? lastDuration : Double(duration)),
-                thumbnailFileId: thumbnailFileId
-            )
-        }
-    }
-
-    // MARK: - Gestures
-    @objc private func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
-        let location = gesture.location(in: player)
-        let isLeft = location.x < player.bounds.width / 2
-
+    @objc func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
+        guard let view = gesture.view else { return }
+        let location = gesture.location(in: view)
+        let isLeft = location.x < view.bounds.width / 2
         let delta: Double = isLeft ? -10.0 : 10.0
-        let target = max(0, min(lastTime + delta, lastDuration > 0 ? lastDuration : lastTime + delta))
-        lastTime = target
-
-        player.playerLayer?.player.seek(time: target) { _ in }
-        showSkipIndicator(isLeft: isLeft)
+        onSeekRelative?(delta)
     }
 
-    @objc private func handlePan(_ gesture: UIPanGestureRecognizer) {
-        let location = gesture.location(in: player)
-        let translation = gesture.translation(in: player)
-        let velocity = gesture.velocity(in: player)
+    @objc func handlePan(_ gesture: UIPanGestureRecognizer) {
+        guard let view = gesture.view else { return }
+        let location = gesture.location(in: view)
+        let translation = gesture.translation(in: view)
+        let velocity = gesture.velocity(in: view)
 
         switch gesture.state {
         case .began:
-            if abs(velocity.x) > abs(velocity.y) * 1.2 {
-                panSide = .seekHorizontal
-                initialSeekTime = lastTime
-            } else if location.x < player.bounds.width / 2 {
-                panSide = .leftVolume
-                initialVolume = AVAudioSession.sharedInstance().outputVolume
-                if volumeSlider == nil {
-                    for sub in volumeView.subviews {
-                        if let slider = sub as? UISlider {
-                            self.volumeSlider = slider
-                            break
-                        }
-                    }
+            if abs(velocity.y) > abs(velocity.x) {
+                if location.x < view.bounds.width / 2 {
+                    panSide = .leftVolume
+                    initialVolume = AVAudioSession.sharedInstance().outputVolume
+                } else {
+                    panSide = .rightBrightness
+                    initialBrightness = UIScreen.main.brightness
                 }
-            } else {
-                panSide = .rightBrightness
-                initialBrightness = UIScreen.main.brightness
             }
         case .changed:
-            if panSide == .seekHorizontal {
-                let scrubDelta = Double(translation.x / (player.bounds.width * 0.75)) * 90.0 // +/- 90s
-                let target = max(0, min(initialSeekTime + scrubDelta, lastDuration > 0 ? lastDuration : initialSeekTime + scrubDelta))
-                lastTime = target
-                player.playerLayer?.player.seek(time: target) { _ in }
-                let currentStr = formatDuration(Int(target))
-                let totalStr = formatDuration(Int(lastDuration))
-                let diffStr = scrubDelta >= 0 ? "+\(Int(scrubDelta))s" : "\(Int(scrubDelta))s"
-                showHUD(text: "\(currentStr) / \(totalStr) (\(diffStr))", icon: scrubDelta >= 0 ? "goforward.10" : "gobackward.10", isLeft: false)
-            } else if panSide == .leftVolume {
-                let delta = -Float(translation.y / (player.bounds.height * 0.55))
+            let delta = -Float(translation.y / (view.bounds.height * 0.55))
+            if panSide == .leftVolume {
                 let newVol = max(0, min(1.0, initialVolume + delta))
                 volumeSlider?.value = newVol
-                showHUD(text: "Volume: \(Int(newVol * 100))%", icon: "speaker.wave.3.fill", isLeft: true)
+                onVolumeChanged?(newVol)
             } else if panSide == .rightBrightness {
-                let delta = -Float(translation.y / (player.bounds.height * 0.55))
                 let newBright = max(0, min(1.0, Float(initialBrightness) + delta))
                 UIScreen.main.brightness = CGFloat(newBright)
-                showHUD(text: "Brightness: \(Int(newBright * 100))%", icon: "sun.max.fill", isLeft: false)
+                onBrightnessChanged?(CGFloat(newBright))
             }
         case .ended, .cancelled:
             panSide = .none
-            hideHUD()
         default:
             break
         }
-    }
-
-    // MARK: - 3 Options Pinch Gesture (Avoid Dynamic Island, Fit to Width, Fit to Height)
-    @objc private func handlePinch(_ gesture: UIPinchGestureRecognizer) {
-        guard gesture.state == .ended else { return }
-        if gesture.scale > 1.15 {
-            switch currentAspectMode {
-            case .fit: currentAspectMode = .fitWidth
-            case .fitWidth: currentAspectMode = .fitHeight
-            case .fitHeight: currentAspectMode = .fit
-            }
-        } else if gesture.scale < 0.85 {
-            switch currentAspectMode {
-            case .fit: currentAspectMode = .fitHeight
-            case .fitHeight: currentAspectMode = .fitWidth
-            case .fitWidth: currentAspectMode = .fit
-            }
-        }
-        applyAspectMode(currentAspectMode)
-    }
-
-    private func applyAspectMode(_ mode: AspectMode) {
-        UIView.animate(withDuration: 0.3) {
-            // Apply scale only to the video rendering subview, NOT player.toolBar or player.navigationBar
-            if let videoView = self.player.subviews.first {
-                videoView.transform = mode == .fit ? .identity : CGAffineTransform(scaleX: mode.scale, y: mode.scale)
-            }
-        }
-        showHUD(text: mode.title, icon: "aspectratio", isLeft: false)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
-            self?.hideHUD()
-        }
-    }
-
-    private func formatDuration(_ seconds: Int) -> String {
-        let h = seconds / 3600
-        let m = (seconds % 3600) / 60
-        let s = seconds % 60
-        if h > 0 {
-            return String(format: "%d:%02d:%02d", h, m, s)
-        } else {
-            return String(format: "%02d:%02d", m, s)
-        }
-    }
-
-    private func showSkipIndicator(isLeft: Bool) {
-        let badge = UILabel()
-        badge.text = isLeft ? "◀◀ 10s" : "10s ▶▶"
-        badge.font = UIFont.systemFont(ofSize: 17, weight: .bold)
-        badge.textColor = .white
-        badge.textAlignment = .center
-        badge.backgroundColor = UIColor.black.withAlphaComponent(0.85)
-        badge.layer.cornerRadius = 20
-        badge.clipsToBounds = true
-
-        let width: CGFloat = 110
-        let height: CGFloat = 44
-        let xPos = isLeft ? bounds.width * 0.25 - width / 2 : bounds.width * 0.75 - width / 2
-        let yPos = bounds.midY - height / 2 // Halfway mark vertically!
-        badge.frame = CGRect(x: xPos, y: yPos, width: width, height: height)
-        badge.alpha = 0
-        badge.transform = CGAffineTransform(scaleX: 0.7, y: 0.7)
-        addSubview(badge)
-        bringSubviewToFront(badge)
-
-        UIView.animate(withDuration: 0.2, animations: {
-            badge.alpha = 1
-            badge.transform = .identity
-        }) { _ in
-            UIView.animate(withDuration: 0.3, delay: 0.3, options: .curveEaseOut, animations: {
-                badge.alpha = 0
-                badge.transform = CGAffineTransform(scaleX: 1.2, y: 1.2)
-            }) { _ in
-                badge.removeFromSuperview()
-            }
-        }
-    }
-
-    // Fixed-frame HUD pill positioned at the vertical halfway mark
-    private func showHUD(text: String, icon: String, isLeft: Bool) {
-        let hudWidth: CGFloat = 200
-        let hudHeight: CGFloat = 40
-        let yPos = bounds.midY - hudHeight / 2 // Halfway mark vertically!
-        let xPos = isLeft ? 24 : bounds.width - hudWidth - 24
-
-        if hudView == nil {
-            let container = UIView(frame: CGRect(x: xPos, y: yPos, width: hudWidth, height: hudHeight))
-            container.backgroundColor = UIColor.black.withAlphaComponent(0.85)
-            container.layer.cornerRadius = 14
-            container.clipsToBounds = true
-
-            let iconView = UIImageView(frame: CGRect(x: 12, y: 10, width: 20, height: 20))
-            iconView.image = UIImage(systemName: icon)
-            iconView.tintColor = .white
-            iconView.contentMode = .scaleAspectFit
-            iconView.tag = 101
-            container.addSubview(iconView)
-
-            let label = UILabel(frame: CGRect(x: 38, y: 0, width: hudWidth - 46, height: hudHeight))
-            label.font = UIFont.systemFont(ofSize: 13, weight: .semibold)
-            label.textColor = .white
-            label.textAlignment = .left
-            label.tag = 102
-            container.addSubview(label)
-
-            addSubview(container)
-            hudView = container
-        }
-
-        if let container = hudView,
-           let iconView = container.viewWithTag(101) as? UIImageView,
-           let label = container.viewWithTag(102) as? UILabel {
-            bringSubviewToFront(container)
-            container.frame = CGRect(x: xPos, y: yPos, width: hudWidth, height: hudHeight)
-            iconView.image = UIImage(systemName: icon)
-            label.text = text
-            container.alpha = 1.0
-        }
-    }
-
-    private func hideHUD() {
-        UIView.animate(withDuration: 0.3, delay: 0.4, options: .curveEaseOut, animations: {
-            self.hudView?.alpha = 0
-        }) { _ in
-            self.hudView?.removeFromSuperview()
-            self.hudView = nil
-        }
-    }
-
-    // Pass touches through to player buttons, subtitle picker, audio track picker, and scrubber
-    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-        if let touchedView = touch.view {
-            if touchedView is UIButton || touchedView is UISlider || touchedView is UIControl ||
-               touchedView.superview is UIButton || touchedView.superview is UISlider ||
-               touchedView.isDescendant(of: player.toolBar) || touchedView.isDescendant(of: player.navigationBar) {
-                if gestureRecognizer is UIPanGestureRecognizer || gestureRecognizer is UITapGestureRecognizer {
-                    return false
-                }
-            }
-        }
-        return true
     }
 
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
@@ -1668,6 +1350,61 @@ final class KSVideoPlayerContainerView: UIView, UIGestureRecognizerDelegate {
     }
 }
 
+// KSPlayer video surface for MKV / AVI / WebM / TS
+struct KSVideoPlayerSurfaceView: UIViewRepresentable {
+    let url: URL
+    let title: String
+    @ObservedObject var viewModel: PlayerViewModel
 
+    func makeUIView(context: Context) -> IOSVideoPlayerView {
+        KSOptions.firstPlayerType = KSMEPlayer.self
+        KSOptions.secondPlayerType = KSMEPlayer.self
+        KSOptions.canBackgroundPlay = true
+        KSOptions.isAutoPlay = true
+        KSOptions.isSeekedAutoPlay = true
 
+        let playerView = IOSVideoPlayerView()
+        playerView.toolBar.isHidden = true
+        playerView.navigationBar.isHidden = true
+        playerView.loadingView.isHidden = true
+        playerView.backgroundColor = .black
+        playerView.playerLayer?.videoGravity = viewModel.videoGravity
 
+        // Disable internal gestures on KSPlayer so our GestureOverlayView has full priority
+        for g in playerView.gestureRecognizers ?? [] {
+            g.isEnabled = false
+        }
+
+        viewModel.bindKSPlayer(playerView: playerView, url: url, title: title)
+
+        return playerView
+    }
+
+    func updateUIView(_ uiView: IOSVideoPlayerView, context: Context) {
+        uiView.playerLayer?.videoGravity = viewModel.videoGravity
+    }
+}
+
+// AVPlayer video surface for MP4 / MOV / M4V
+struct CustomVideoPlayerView: UIViewRepresentable {
+    let player: AVPlayer
+    let videoGravity: AVLayerVideoGravity
+
+    func makeUIView(context: Context) -> PlayerUIView {
+        let view = PlayerUIView()
+        view.playerLayer.player = player
+        view.playerLayer.videoGravity = videoGravity
+        view.backgroundColor = .black
+        return view
+    }
+
+    func updateUIView(_ uiView: PlayerUIView, context: Context) {
+        uiView.playerLayer.player = player
+        uiView.playerLayer.videoGravity = videoGravity
+    }
+}
+
+class PlayerUIView: UIView {
+    override class var layerClass: AnyClass { AVPlayerLayer.self }
+    var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
+}
