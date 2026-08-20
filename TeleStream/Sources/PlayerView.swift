@@ -937,7 +937,6 @@ class PlayerViewModel: ObservableObject {
         if isMKV {
             UIView.animate(withDuration: 0.25) {
                 self.ksPlayerView?.contentMode = (self.videoGravity == .resizeAspect) ? .scaleAspectFit : .scaleAspectFill
-                self.ksPlayerView?.playerLayer?.contentsGravity = (self.videoGravity == .resizeAspect) ? .resizeAspect : .resizeAspectFill
             }
         }
         resetControlsTimer()
@@ -1366,7 +1365,6 @@ final class CustomKSPlayerView: IOSVideoPlayerView {
         super.updateUI(isLandscape: isLandscape)
         toolBar.isHidden = true
         navigationBar.isHidden = true
-        loadingView.isHidden = true
         subviews.forEach { view in
             // Hide all KSPlayer specific subviews except the playerLayer which is a CALayer
             if view != self {
@@ -1394,7 +1392,6 @@ struct KSVideoPlayerSurfaceView: UIViewRepresentable {
         playerView.navigationBar.isHidden = true
         playerView.backgroundColor = .black
         playerView.contentMode = (viewModel.videoGravity == .resizeAspect) ? .scaleAspectFit : .scaleAspectFill
-        playerView.playerLayer?.contentsGravity = (viewModel.videoGravity == .resizeAspect) ? .resizeAspect : .resizeAspectFill
 
         // Disable internal gestures on KSPlayer so our GestureOverlayView has full priority
         for g in playerView.gestureRecognizers ?? [] {
@@ -1409,7 +1406,6 @@ struct KSVideoPlayerSurfaceView: UIViewRepresentable {
     func updateUIView(_ uiView: CustomKSPlayerView, context: Context) {
         UIView.animate(withDuration: 0.25) {
             uiView.contentMode = (viewModel.videoGravity == .resizeAspect) ? .scaleAspectFit : .scaleAspectFill
-            uiView.playerLayer?.contentsGravity = (viewModel.videoGravity == .resizeAspect) ? .resizeAspect : .resizeAspectFill
         }
     }
 }
