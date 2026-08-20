@@ -49,7 +49,8 @@ struct PlayerView: View {
     @State private var aspectTimer: Timer?
 
     private var isMKV: Bool {
-        return false // Unified AVPlayer pipeline for full native controls, audio tracks, subtitles, gestures, HUDs, and autoplay
+        let ext = (fileName as NSString).pathExtension.lowercased()
+        return ext == "mkv" || ext == "avi" || ext == "webm" || ext == "flv" || ext == "wmv" || ext == "ts"
     }
 
     private var streamURL: URL {
@@ -61,73 +62,86 @@ struct PlayerView: View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            // Video rendering layer
-            CustomVideoPlayerView(
-                player: viewModel.player,
-                videoGravity: viewModel.videoGravity,
-                onToggleAspect: {
-                    viewModel.toggleAspect()
-                    triggerAspectHUD()
-                },
-                onSeekRelative: { delta in
-                    viewModel.seekRelative(seconds: delta)
-                    triggerSkipBadge(isLeft: delta < 0)
-                },
-                onVolumeChanged: { vol in
-                    currentVolume = vol
-                    triggerVolumeHUD()
-                },
-                onBrightnessChanged: { bright in
-                    currentBrightness = bright
-                    triggerBrightnessHUD()
-                },
-                onToggleControls: {
-                    viewModel.toggleControlsVisibility()
-                }
-            )
-            .ignoresSafeArea()
-
-            // Unified Centered Buffering Indicator
-            if viewModel.isLoading && viewModel.error == nil {
-                VStack(spacing: 12) {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        .scaleEffect(1.4)
-                    Text("Buffering...")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.white.opacity(0.85))
-                }
-                .padding(.horizontal, 24)
-                .padding(.vertical, 18)
-                .background(Color.black.opacity(0.75))
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-                .transition(.opacity)
-            }
-
-            // Skip 10s feedback badge
-            if let skip = skipBadge {
-                HStack {
-                    if !skip.isLeft { Spacer() }
-                    HStack(spacing: 8) {
-                        Image(systemName: skip.isLeft ? "gobackward.10" : "goforward.10")
-                            .font(.system(size: 20, weight: .bold))
-                        Text(skip.text)
-                            .font(.system(size: 16, weight: .bold))
+            if isMKV {
+                KSVideoPlayerRepresentable(
+                    url: streamURL,
+                    title: fileName,
+                    fileId: fileId,
+                    fileSize: fileSize,
+                    chatId: chatId,
+                    chatTitle: chatTitle,
+                    duration: duration,
+                    thumbnailFileId: thumbnailFileId,
+                    onDismiss: { dismiss() }
+                )
+                .ignoresSafeArea()
+            } else {
+                // Video rendering layer for MP4 / MOV / M4V
+                CustomVideoPlayerView(
+                    player: viewModel.player,
+                    videoGravity: viewModel.videoGravity,
+                    onToggleAspect: {
+                        viewModel.toggleAspect()
+                        triggerAspectHUD()
+                    },
+                    onSeekRelative: { delta in
+                        viewModel.seekRelative(seconds: delta)
+                        triggerSkipBadge(isLeft: delta < 0)
+                    },
+                    onVolumeChanged: { vol in
+                        currentVolume = vol
+                        triggerVolumeHUD()
+                    },
+                    onBrightnessChanged: { bright in
+                        currentBrightness = bright
+                        triggerBrightnessHUD()
+                    },
+                    onToggleControls: {
+                        viewModel.toggleControlsVisibility()
                     }
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 12)
-                    .background(Color.black.opacity(0.8))
-                    .clipShape(Capsule())
-                    .padding(.horizontal, 60)
-                    .transition(.scale.combined(with: .opacity))
-                    if skip.isLeft { Spacer() }
-                }
-            }
+                )
+                .ignoresSafeArea()
 
-            // Volume HUD (Top Left)
-            if showVolumeHUD {
-                VStack {
+                // Unified Centered Buffering Indicator
+                if viewModel.isLoading && viewModel.error == nil {
+                    VStack(spacing: 12) {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .scaleEffect(1.4)
+                        Text("Buffering...")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.white.opacity(0.85))
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 18)
+                    .background(Color.black.opacity(0.75))
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .transition(.opacity)
+                }
+
+                // Skip 10s feedback badge (Halfway Down)
+                if let skip = skipBadge {
+                    HStack {
+                        if !skip.isLeft { Spacer() }
+                        HStack(spacing: 8) {
+                            Image(systemName: skip.isLeft ? "gobackward.10" : "goforward.10")
+                                .font(.system(size: 20, weight: .bold))
+                            Text(skip.text)
+                                .font(.system(size: 16, weight: .bold))
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 12)
+                        .background(Color.black.opacity(0.85))
+                        .clipShape(Capsule())
+                        .padding(.horizontal, 50)
+                        .transition(.scale.combined(with: .opacity))
+                        if skip.isLeft { Spacer() }
+                    }
+                }
+
+                // Volume HUD (Left, Halfway Down)
+                if showVolumeHUD {
                     HStack {
                         HStack(spacing: 8) {
                             Image(systemName: "speaker.wave.3.fill")
@@ -139,21 +153,17 @@ struct PlayerView: View {
                         }
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)
-                        .background(Color.black.opacity(0.8))
+                        .background(Color.black.opacity(0.85))
                         .clipShape(Capsule())
                         .padding(.leading, 24)
-                        .padding(.top, 54)
 
                         Spacer()
                     }
-                    Spacer()
+                    .transition(.opacity)
                 }
-                .transition(.opacity)
-            }
 
-            // Brightness HUD (Top Right)
-            if showBrightnessHUD {
-                VStack {
+                // Brightness HUD (Right, Halfway Down)
+                if showBrightnessHUD {
                     HStack {
                         Spacer()
                         HStack(spacing: 8) {
@@ -166,37 +176,34 @@ struct PlayerView: View {
                         }
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)
-                        .background(Color.black.opacity(0.8))
+                        .background(Color.black.opacity(0.85))
                         .clipShape(Capsule())
                         .padding(.trailing, 24)
-                        .padding(.top, 54)
                     }
-                    Spacer()
-                }
-                .transition(.opacity)
-            }
-
-            // Aspect Ratio HUD (Top Center)
-            if showAspectHUD {
-                VStack {
-                    HStack(spacing: 8) {
-                        Image(systemName: "aspectratio")
-                            .font(.system(size: 15))
-                            .foregroundColor(.white)
-                        Text(aspectHUDText)
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundColor(.white)
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(Color.black.opacity(0.8))
-                    .clipShape(Capsule())
-                    .padding(.top, 54)
                     .transition(.opacity)
-
-                    Spacer()
                 }
-            }
+
+                // Aspect Ratio HUD (Top Center)
+                if showAspectHUD {
+                    VStack {
+                        HStack(spacing: 8) {
+                            Image(systemName: "aspectratio")
+                                .font(.system(size: 15))
+                                .foregroundColor(.white)
+                            Text(aspectHUDText)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(.white)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color.black.opacity(0.85))
+                        .clipShape(Capsule())
+                        .padding(.top, 54)
+                        .transition(.opacity)
+
+                        Spacer()
+                    }
+                }
 
             // Error Overlay with Back buttons
             if let error = viewModel.error {
@@ -276,16 +283,17 @@ struct PlayerView: View {
                 .transition(.opacity)
             }
 
-            // Custom Player Controls Overlay
-            if viewModel.showControls && viewModel.error == nil {
-                playerControlsOverlay
-                    .transition(.opacity)
-            }
+                // Custom Player Controls Overlay
+                if viewModel.showControls && viewModel.error == nil {
+                    playerControlsOverlay
+                        .transition(.opacity)
+                }
 
-            // Auto-next countdown overlay
-            if viewModel.showAutoNextCountdown {
-                autoNextOverlay
-                    .transition(.scale.combined(with: .opacity))
+                // Auto-next countdown overlay
+                if viewModel.showAutoNextCountdown {
+                    autoNextOverlay
+                        .transition(.scale.combined(with: .opacity))
+                }
             }
         }
         .toolbar(.hidden, for: .tabBar)
@@ -301,7 +309,9 @@ struct PlayerView: View {
             viewModel.videoDuration = duration
             viewModel.thumbnailFileId = thumbnailFileId
             viewModel.allVideos = allVideos
-            viewModel.setup(fileId: fileId, fileSize: fileSize, fileName: fileName, client: client)
+            if !isMKV {
+                viewModel.setup(fileId: fileId, fileSize: fileSize, fileName: fileName, client: client)
+            }
             AppSettings.shared.savePosition(
                 fileId: fileId,
                 fileSize: fileSize,
@@ -314,8 +324,10 @@ struct PlayerView: View {
             )
         }
         .onDisappear {
-            viewModel.savePosition()
-            viewModel.teardown()
+            if !isMKV {
+                viewModel.savePosition()
+                viewModel.teardown()
+            }
         }
     }
 
@@ -1219,6 +1231,441 @@ struct CustomVideoPlayerView: UIViewRepresentable {
 class PlayerUIView: UIView {
     override class var layerClass: AnyClass { AVPlayerLayer.self }
     var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
+}
+
+struct KSVideoPlayerRepresentable: UIViewRepresentable {
+    let url: URL
+    let title: String
+    let fileId: Int
+    let fileSize: Int64
+    let chatId: Int64
+    let chatTitle: String
+    let duration: Int
+    let thumbnailFileId: Int?
+    var onDismiss: () -> Void
+
+    func makeUIView(context: Context) -> KSVideoPlayerContainerView {
+        KSOptions.firstPlayerType = KSMEPlayer.self
+        KSOptions.secondPlayerType = KSMEPlayer.self
+        KSOptions.canBackgroundPlay = true
+        KSOptions.isAutoPlay = true
+        KSOptions.isSeekedAutoPlay = true
+
+        let container = KSVideoPlayerContainerView()
+        container.fileId = fileId
+        container.fileSize = fileSize
+        container.fileName = title
+        container.chatId = chatId
+        container.chatTitle = chatTitle
+        container.duration = duration
+        container.thumbnailFileId = thumbnailFileId
+        container.savedPos = AppSettings.shared.playbackPositions[fileId] ?? 0
+        container.onDismiss = onDismiss
+        container.configure(url: url, title: title)
+
+        return container
+    }
+
+    func updateUIView(_ uiView: KSVideoPlayerContainerView, context: Context) {}
+}
+
+final class KSVideoPlayerContainerView: UIView, UIGestureRecognizerDelegate {
+    let player = IOSVideoPlayerView()
+    private let volumeView = MPVolumeView(frame: CGRect(x: -1000, y: -1000, width: 1, height: 1))
+    private var volumeSlider: UISlider?
+    private var hudView: UIView?
+
+    var fileId: Int = 0
+    var fileSize: Int64 = 0
+    var fileName: String = ""
+    var chatId: Int64 = 0
+    var chatTitle: String = ""
+    var duration: Int = 0
+    var thumbnailFileId: Int? = nil
+    var savedPos: Double = 0
+    var onDismiss: (() -> Void)?
+
+    private var hasSeekedToSavedPos = false
+    private var lastTime: Double = 0
+    private var lastDuration: Double = 0
+
+    // 3 Aspect Ratio Options
+    enum AspectMode: Int, CaseIterable {
+        case fit = 0        // Avoid Dynamic Island / Original Aspect Ratio
+        case fitWidth = 1   // Fit to Width (100% display width under Dynamic Island)
+        case fitHeight = 2  // Fit to Height
+
+        var title: String {
+            switch self {
+            case .fit: return "Original (Avoid Dynamic Island)"
+            case .fitWidth: return "Fit to Width (Fill Dynamic Island)"
+            case .fitHeight: return "Fit to Height"
+            }
+        }
+
+        var scale: CGFloat {
+            switch self {
+            case .fit: return 1.0
+            case .fitWidth: return 1.28
+            case .fitHeight: return 1.14
+            }
+        }
+    }
+    private var currentAspectMode: AspectMode = .fit
+
+    // Pan tracking for Volume (Left), Brightness (Right), and Horizontal Seeking
+    private var panSide: PanSide = .none
+    private var initialVolume: Float = 0
+    private var initialBrightness: CGFloat = 0
+    private var initialSeekTime: Double = 0
+
+    enum PanSide {
+        case none
+        case leftVolume
+        case rightBrightness
+        case seekHorizontal
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setupViews()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setupViews()
+    }
+
+    private func setupViews() {
+        backgroundColor = .black
+        clipsToBounds = true
+
+        // 1. Player View constrained to safeAreaLayoutGuide so title & back button NEVER hit Dynamic Island
+        player.contentMode = .scaleAspectFit
+        player.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(player)
+
+        NSLayoutConstraint.activate([
+            player.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor),
+            player.leadingAnchor.constraint(equalTo: safeAreaLayoutGuide.leadingAnchor),
+            player.trailingAnchor.constraint(equalTo: safeAreaLayoutGuide.trailingAnchor),
+            player.bottomAnchor.constraint(equalTo: safeAreaLayoutGuide.bottomAnchor)
+        ])
+
+        // 2. Volume View for system volume control
+        volumeView.alpha = 0.0001
+        volumeView.clipsToBounds = true
+        addSubview(volumeView)
+        for sub in volumeView.subviews {
+            if let slider = sub as? UISlider {
+                self.volumeSlider = slider
+                break
+            }
+        }
+
+        // 3. Gestures attached directly to player view
+        let pinch = UIPinchGestureRecognizer(target: self, action: #selector(handlePinch(_:)))
+        pinch.delegate = self
+        player.addGestureRecognizer(pinch)
+
+        let doubleTap = UITapGestureRecognizer(target: self, action: #selector(handleDoubleTap(_:)))
+        doubleTap.numberOfTapsRequired = 2
+        doubleTap.delegate = self
+        player.addGestureRecognizer(doubleTap)
+
+        let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
+        pan.delegate = self
+        player.addGestureRecognizer(pan)
+
+        // Disable KSPlayer internal pan gestures so custom Left=Volume, Right=Brightness has 100% priority
+        for g in player.gestureRecognizers ?? [] {
+            if g is UIPanGestureRecognizer && g != pan {
+                g.isEnabled = false
+            }
+            if let tap = g as? UITapGestureRecognizer, tap != doubleTap && tap.numberOfTapsRequired == 1 {
+                tap.require(toFail: doubleTap)
+            }
+        }
+
+        DispatchQueue.main.async { [weak self, weak doubleTap] in
+            guard let self = self, let doubleTap = doubleTap else { return }
+            for g in self.player.gestureRecognizers ?? [] {
+                if g is UIPanGestureRecognizer && g != pan {
+                    g.isEnabled = false
+                }
+                if let tap = g as? UITapGestureRecognizer, tap != doubleTap && tap.numberOfTapsRequired == 1 {
+                    tap.require(toFail: doubleTap)
+                }
+            }
+        }
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        // Remove fullscreen button on the bottom right of toolbar
+        for sub in player.toolBar.subviews {
+            if let btn = sub as? UIButton, btn.frame.origin.x > player.toolBar.bounds.width * 0.75 {
+                btn.isHidden = true
+                btn.alpha = 0
+            }
+        }
+    }
+
+    func configure(url: URL, title: String) {
+        player.backBlock = { [weak self] in
+            self?.savePosition()
+            self?.onDismiss?()
+        }
+
+        player.playTimeDidChange = { [weak self] current, total in
+            self?.handleTimeChange(current: current, total: total)
+        }
+
+        let resource = KSPlayerResource(url: url, options: KSOptions(), name: title)
+        player.set(resource: resource)
+    }
+
+    func handleTimeChange(current: TimeInterval, total: TimeInterval) {
+        lastTime = current
+        if total > 0 { lastDuration = total }
+
+        if !hasSeekedToSavedPos && savedPos > 3 && (total == 0 || savedPos < total - 5) {
+            hasSeekedToSavedPos = true
+            player.playerLayer?.player.seek(time: savedPos) { _ in }
+        }
+
+        if Int(current) > 0 && Int(current) % 5 == 0 {
+            savePosition()
+        }
+    }
+
+    func savePosition() {
+        guard fileId != 0 && lastTime > 0 else { return }
+        DispatchQueue.main.async { [self] in
+            AppSettings.shared.savePosition(
+                fileId: fileId,
+                fileSize: fileSize,
+                position: lastTime,
+                fileName: fileName,
+                chatId: chatId,
+                chatTitle: chatTitle,
+                duration: Int(lastDuration > 0 ? lastDuration : Double(duration)),
+                thumbnailFileId: thumbnailFileId
+            )
+        }
+    }
+
+    // MARK: - Gestures
+    @objc private func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
+        let location = gesture.location(in: player)
+        let isLeft = location.x < player.bounds.width / 2
+
+        let delta: Double = isLeft ? -10.0 : 10.0
+        let target = max(0, min(lastTime + delta, lastDuration > 0 ? lastDuration : lastTime + delta))
+        lastTime = target
+
+        player.playerLayer?.player.seek(time: target) { _ in }
+        showSkipIndicator(isLeft: isLeft)
+    }
+
+    @objc private func handlePan(_ gesture: UIPanGestureRecognizer) {
+        let location = gesture.location(in: player)
+        let translation = gesture.translation(in: player)
+        let velocity = gesture.velocity(in: player)
+
+        switch gesture.state {
+        case .began:
+            if abs(velocity.x) > abs(velocity.y) * 1.2 {
+                panSide = .seekHorizontal
+                initialSeekTime = lastTime
+            } else if location.x < player.bounds.width / 2 {
+                panSide = .leftVolume
+                initialVolume = AVAudioSession.sharedInstance().outputVolume
+                if volumeSlider == nil {
+                    for sub in volumeView.subviews {
+                        if let slider = sub as? UISlider {
+                            self.volumeSlider = slider
+                            break
+                        }
+                    }
+                }
+            } else {
+                panSide = .rightBrightness
+                initialBrightness = UIScreen.main.brightness
+            }
+        case .changed:
+            if panSide == .seekHorizontal {
+                let scrubDelta = Double(translation.x / (player.bounds.width * 0.75)) * 90.0 // +/- 90s
+                let target = max(0, min(initialSeekTime + scrubDelta, lastDuration > 0 ? lastDuration : initialSeekTime + scrubDelta))
+                lastTime = target
+                player.playerLayer?.player.seek(time: target) { _ in }
+                let currentStr = formatDuration(Int(target))
+                let totalStr = formatDuration(Int(lastDuration))
+                let diffStr = scrubDelta >= 0 ? "+\(Int(scrubDelta))s" : "\(Int(scrubDelta))s"
+                showHUD(text: "\(currentStr) / \(totalStr) (\(diffStr))", icon: scrubDelta >= 0 ? "goforward.10" : "gobackward.10", isLeft: false)
+            } else if panSide == .leftVolume {
+                let delta = -Float(translation.y / (player.bounds.height * 0.55))
+                let newVol = max(0, min(1.0, initialVolume + delta))
+                volumeSlider?.value = newVol
+                showHUD(text: "Volume: \(Int(newVol * 100))%", icon: "speaker.wave.3.fill", isLeft: true)
+            } else if panSide == .rightBrightness {
+                let delta = -Float(translation.y / (player.bounds.height * 0.55))
+                let newBright = max(0, min(1.0, Float(initialBrightness) + delta))
+                UIScreen.main.brightness = CGFloat(newBright)
+                showHUD(text: "Brightness: \(Int(newBright * 100))%", icon: "sun.max.fill", isLeft: false)
+            }
+        case .ended, .cancelled:
+            panSide = .none
+            hideHUD()
+        default:
+            break
+        }
+    }
+
+    // MARK: - 3 Options Pinch Gesture (Avoid Dynamic Island, Fit to Width, Fit to Height)
+    @objc private func handlePinch(_ gesture: UIPinchGestureRecognizer) {
+        guard gesture.state == .ended else { return }
+        if gesture.scale > 1.15 {
+            switch currentAspectMode {
+            case .fit: currentAspectMode = .fitWidth
+            case .fitWidth: currentAspectMode = .fitHeight
+            case .fitHeight: currentAspectMode = .fit
+            }
+        } else if gesture.scale < 0.85 {
+            switch currentAspectMode {
+            case .fit: currentAspectMode = .fitHeight
+            case .fitHeight: currentAspectMode = .fitWidth
+            case .fitWidth: currentAspectMode = .fit
+            }
+        }
+        applyAspectMode(currentAspectMode)
+    }
+
+    private func applyAspectMode(_ mode: AspectMode) {
+        UIView.animate(withDuration: 0.3) {
+            // Apply scale only to the video rendering subview, NOT player.toolBar or player.navigationBar
+            if let videoView = self.player.subviews.first {
+                videoView.transform = mode == .fit ? .identity : CGAffineTransform(scaleX: mode.scale, y: mode.scale)
+            }
+        }
+        showHUD(text: mode.title, icon: "aspectratio", isLeft: false)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+            self?.hideHUD()
+        }
+    }
+
+    private func formatDuration(_ seconds: Int) -> String {
+        let h = seconds / 3600
+        let m = (seconds % 3600) / 60
+        let s = seconds % 60
+        if h > 0 {
+            return String(format: "%d:%02d:%02d", h, m, s)
+        } else {
+            return String(format: "%02d:%02d", m, s)
+        }
+    }
+
+    private func showSkipIndicator(isLeft: Bool) {
+        let badge = UILabel()
+        badge.text = isLeft ? "◀◀ 10s" : "10s ▶▶"
+        badge.font = UIFont.systemFont(ofSize: 17, weight: .bold)
+        badge.textColor = .white
+        badge.textAlignment = .center
+        badge.backgroundColor = UIColor.black.withAlphaComponent(0.85)
+        badge.layer.cornerRadius = 20
+        badge.clipsToBounds = true
+
+        let width: CGFloat = 110
+        let height: CGFloat = 44
+        let xPos = isLeft ? bounds.width * 0.25 - width / 2 : bounds.width * 0.75 - width / 2
+        let yPos = bounds.midY - height / 2 // Halfway mark vertically!
+        badge.frame = CGRect(x: xPos, y: yPos, width: width, height: height)
+        badge.alpha = 0
+        badge.transform = CGAffineTransform(scaleX: 0.7, y: 0.7)
+        addSubview(badge)
+        bringSubviewToFront(badge)
+
+        UIView.animate(withDuration: 0.2, animations: {
+            badge.alpha = 1
+            badge.transform = .identity
+        }) { _ in
+            UIView.animate(withDuration: 0.3, delay: 0.3, options: .curveEaseOut, animations: {
+                badge.alpha = 0
+                badge.transform = CGAffineTransform(scaleX: 1.2, y: 1.2)
+            }) { _ in
+                badge.removeFromSuperview()
+            }
+        }
+    }
+
+    // Fixed-frame HUD pill positioned at the vertical halfway mark
+    private func showHUD(text: String, icon: String, isLeft: Bool) {
+        let hudWidth: CGFloat = 200
+        let hudHeight: CGFloat = 40
+        let yPos = bounds.midY - hudHeight / 2 // Halfway mark vertically!
+        let xPos = isLeft ? 24 : bounds.width - hudWidth - 24
+
+        if hudView == nil {
+            let container = UIView(frame: CGRect(x: xPos, y: yPos, width: hudWidth, height: hudHeight))
+            container.backgroundColor = UIColor.black.withAlphaComponent(0.85)
+            container.layer.cornerRadius = 14
+            container.clipsToBounds = true
+
+            let iconView = UIImageView(frame: CGRect(x: 12, y: 10, width: 20, height: 20))
+            iconView.image = UIImage(systemName: icon)
+            iconView.tintColor = .white
+            iconView.contentMode = .scaleAspectFit
+            iconView.tag = 101
+            container.addSubview(iconView)
+
+            let label = UILabel(frame: CGRect(x: 38, y: 0, width: hudWidth - 46, height: hudHeight))
+            label.font = UIFont.systemFont(ofSize: 13, weight: .semibold)
+            label.textColor = .white
+            label.textAlignment = .left
+            label.tag = 102
+            container.addSubview(label)
+
+            addSubview(container)
+            hudView = container
+        }
+
+        if let container = hudView,
+           let iconView = container.viewWithTag(101) as? UIImageView,
+           let label = container.viewWithTag(102) as? UILabel {
+            bringSubviewToFront(container)
+            container.frame = CGRect(x: xPos, y: yPos, width: hudWidth, height: hudHeight)
+            iconView.image = UIImage(systemName: icon)
+            label.text = text
+            container.alpha = 1.0
+        }
+    }
+
+    private func hideHUD() {
+        UIView.animate(withDuration: 0.3, delay: 0.4, options: .curveEaseOut, animations: {
+            self.hudView?.alpha = 0
+        }) { _ in
+            self.hudView?.removeFromSuperview()
+            self.hudView = nil
+        }
+    }
+
+    // Pass touches through to player buttons, subtitle picker, audio track picker, and scrubber
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        if let touchedView = touch.view {
+            if touchedView is UIButton || touchedView is UISlider || touchedView is UIControl ||
+               touchedView.superview is UIButton || touchedView.superview is UISlider ||
+               touchedView.isDescendant(of: player.toolBar) || touchedView.isDescendant(of: player.navigationBar) {
+                if gestureRecognizer is UIPanGestureRecognizer || gestureRecognizer is UITapGestureRecognizer {
+                    return false
+                }
+            }
+        }
+        return true
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        return false
+    }
 }
 
 
