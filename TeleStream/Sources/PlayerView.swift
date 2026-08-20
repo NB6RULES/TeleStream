@@ -723,7 +723,7 @@ class PlayerViewModel: ObservableObject {
     private var endObserver: NSObjectProtocol?
 
     // KSPlayer components
-    weak var ksPlayerView: IOSVideoPlayerView?
+    weak var ksPlayerView: CustomKSPlayerView?
 
     private var autoNextTimer: Timer?
     private var controlsTimer: Timer?
@@ -824,7 +824,7 @@ class PlayerViewModel: ObservableObject {
         resetControlsTimer()
     }
 
-    func bindKSPlayer(playerView: IOSVideoPlayerView, url: URL, title: String) {
+    func bindKSPlayer(playerView: CustomKSPlayerView, url: URL, title: String) {
         self.ksPlayerView = playerView
         self.isLoading = true
         self.error = nil
@@ -846,7 +846,7 @@ class PlayerViewModel: ObservableObject {
             }
         }
 
-        playerView.stateDidChange = { [weak self] state in
+        playerView.onStateChange = { [weak self] state in
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 switch state {
@@ -935,7 +935,9 @@ class PlayerViewModel: ObservableObject {
     func toggleAspect() {
         videoGravity = (videoGravity == .resizeAspect) ? .resizeAspectFill : .resizeAspect
         if isMKV {
-            ksPlayerView?.playerLayer?.videoGravity = videoGravity
+            UIView.animate(withDuration: 0.25) {
+                self.ksPlayerView?.transform = (self.videoGravity == .resizeAspect) ? .identity : CGAffineTransform(scaleX: 1.28, y: 1.28)
+            }
         }
         resetControlsTimer()
     }
@@ -1350,25 +1352,33 @@ class GestureCoordinator: NSObject, UIGestureRecognizerDelegate {
     }
 }
 
+// Custom KSPlayer subclass to hook into player state transitions
+final class CustomKSPlayerView: IOSVideoPlayerView {
+    var onStateChange: ((KSPlayerState) -> Void)?
+
+    override func player(layer: KSPlayerLayer, state: KSPlayerState) {
+        super.player(layer: layer, state: state)
+        onStateChange?(state)
+    }
+}
+
 // KSPlayer video surface for MKV / AVI / WebM / TS
 struct KSVideoPlayerSurfaceView: UIViewRepresentable {
     let url: URL
     let title: String
     @ObservedObject var viewModel: PlayerViewModel
 
-    func makeUIView(context: Context) -> IOSVideoPlayerView {
+    func makeUIView(context: Context) -> CustomKSPlayerView {
         KSOptions.firstPlayerType = KSMEPlayer.self
         KSOptions.secondPlayerType = KSMEPlayer.self
         KSOptions.canBackgroundPlay = true
         KSOptions.isAutoPlay = true
         KSOptions.isSeekedAutoPlay = true
 
-        let playerView = IOSVideoPlayerView()
+        let playerView = CustomKSPlayerView()
         playerView.toolBar.isHidden = true
         playerView.navigationBar.isHidden = true
-        playerView.loadingView.isHidden = true
         playerView.backgroundColor = .black
-        playerView.playerLayer?.videoGravity = viewModel.videoGravity
 
         // Disable internal gestures on KSPlayer so our GestureOverlayView has full priority
         for g in playerView.gestureRecognizers ?? [] {
@@ -1380,8 +1390,10 @@ struct KSVideoPlayerSurfaceView: UIViewRepresentable {
         return playerView
     }
 
-    func updateUIView(_ uiView: IOSVideoPlayerView, context: Context) {
-        uiView.playerLayer?.videoGravity = viewModel.videoGravity
+    func updateUIView(_ uiView: CustomKSPlayerView, context: Context) {
+        UIView.animate(withDuration: 0.25) {
+            uiView.transform = (viewModel.videoGravity == .resizeAspect) ? .identity : CGAffineTransform(scaleX: 1.28, y: 1.28)
+        }
     }
 }
 
