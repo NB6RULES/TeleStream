@@ -968,9 +968,6 @@ class RealTelegramClient {
   // If we pass file: msg.media, getFileInfo() extracts the FULL file size → downloads everything.
   // Fix: pass InputDocumentFileLocation (getFileInfo returns size=undefined) with an explicit
   // fileSize equal to ONLY the bytes we need. GramJS then stops after those bytes.
-  //
-  // OPTIMIZATION: For large chunks (>512KB), we fire multiple 512KB part requests
-  // in parallel (up to 4 at once) to maximize throughput within a single chunk.
   public async downloadFileChunk(fileId: number | string, start: number, end: number): Promise<ArrayBuffer> {
     if (!this.client) {
       throw new Error('Telegram client not connected');
@@ -991,14 +988,13 @@ class RealTelegramClient {
     }
 
     const length = end - start + 1;
-    const PART_SIZE = 512 * 1024; // 512KB — safe for all Telegram accounts
-    const MAX_PARTS_PARALLEL = 4;  // Fire up to 4 parts at once
+    // MTProto requires offset to be a multiple of the limit (512KB boundaries)
+    const ALIGNMENT = 512 * 1024; 
 
     // Align offset DOWN to 512KB boundary; align end UP to 512KB boundary
-    const alignedStart = Math.floor(start / PART_SIZE) * PART_SIZE;
-    const alignedEnd = Math.ceil((end + 1) / PART_SIZE) * PART_SIZE;
+    const alignedStart = Math.floor(start / ALIGNMENT) * ALIGNMENT;
+    const alignedEnd = Math.ceil((end + 1) / ALIGNMENT) * ALIGNMENT;
     const totalNeeded = alignedEnd - alignedStart;
-    const numParts = Math.ceil(totalNeeded / PART_SIZE);
 
     // Build a bare InputDocumentFileLocation — getFileInfo() will return size=undefined for this,
     // so iterDownload won't auto-calculate a huge limit from the full file size.
@@ -1009,73 +1005,50 @@ class RealTelegramClient {
       thumbSize: '',
     });
 
-    console.log(`[MTProto Stream] Chunk [${start}-${end}] (${numParts} parts × 512KB) for msg #${numId}`);
+    console.log(`[MTProto Stream] Chunk [${start}-${end}] (need ${totalNeeded} bytes) for msg #${numId}`);
 
     try {
+      const parts: Buffer[] = [];
+      let fetched = 0;
+      
       const sender = await (this.client as any).getSender(doc.dcId);
 
-      // Fetch a single 512KB part at a given offset
-      const fetchPart = async (partOffset: number): Promise<Buffer | null> => {
+      while (fetched < totalNeeded) {
+        const partOffset = alignedStart + fetched;
+        const currentLimit = 512 * 1024; // ALWAYS 512KB to avoid MTProto LIMIT_INVALID and GenericDownloadIter corruption
+
         try {
           const result = await (this.client as any).invokeWithSender(
             new Api.upload.GetFile({
               location: location,
               offset: bigInt(partOffset) as any,
-              limit: PART_SIZE,
+              limit: currentLimit,
             }),
             sender
           );
+
           if (result && result.bytes && result.bytes.length > 0) {
-            return result.bytes;
+            parts.push(result.bytes);
+            fetched += result.bytes.length;
+            // EOF check: if Telegram returned less than we asked for, we've hit the end of the file
+            if (result.bytes.length < currentLimit) {
+              break;
+            }
+          } else {
+            break;
           }
-          return null;
         } catch (err: any) {
-          const errMsg = (err?.message || '').toUpperCase();
-          if (errMsg.includes('OFFSET_INVALID') || errMsg.includes('LIMIT_INVALID')) {
-            return null; // EOF
+          const msg = (err?.message || '').toUpperCase();
+          if (msg.includes('OFFSET_INVALID') || msg.includes('LIMIT_INVALID')) {
+            // We reached EOF or past EOF. Stop fetching.
+            break;
           }
           throw err;
         }
-      };
-
-      // Fire parts in parallel batches of MAX_PARTS_PARALLEL
-      const allParts: (Buffer | null)[] = new Array(numParts).fill(null);
-      
-      for (let batchStart = 0; batchStart < numParts; batchStart += MAX_PARTS_PARALLEL) {
-        const batchEnd = Math.min(batchStart + MAX_PARTS_PARALLEL, numParts);
-        const batchPromises: Promise<void>[] = [];
-
-        for (let i = batchStart; i < batchEnd; i++) {
-          const partOffset = alignedStart + i * PART_SIZE;
-          batchPromises.push(
-            fetchPart(partOffset).then((result) => {
-              allParts[i] = result;
-            })
-          );
-        }
-
-        await Promise.all(batchPromises);
-
-        // If any part in this batch returned null/short, we've hit EOF — stop fetching more batches
-        let hitEof = false;
-        for (let i = batchStart; i < batchEnd; i++) {
-          if (allParts[i] === null || (allParts[i] && allParts[i]!.length < PART_SIZE)) {
-            hitEof = true;
-            break;
-          }
-        }
-        if (hitEof) break;
       }
 
-      // Concatenate all non-null parts in order
-      const validParts: Buffer[] = [];
-      for (const part of allParts) {
-        if (part === null) break; // Stop at first gap
-        validParts.push(part);
-      }
-
-      if (validParts.length > 0) {
-        const combined = Buffer.concat(validParts);
+      if (parts.length > 0) {
+        const combined = Buffer.concat(parts);
         const relativeStart = start - alignedStart;
         const slice = combined.subarray(relativeStart, relativeStart + length);
         return slice.buffer.slice(slice.byteOffset, slice.byteOffset + slice.byteLength) as ArrayBuffer;
@@ -1085,8 +1058,8 @@ class RealTelegramClient {
       // so the Service Worker can properly return HTTP 416 Range Not Satisfiable
       return new ArrayBuffer(0);
     } catch (err: any) {
-      const errMsg = (err?.message || '').toUpperCase();
-      if (errMsg.includes('OFFSET_INVALID') || errMsg.includes('LIMIT_INVALID')) {
+      const msg = (err?.message || '').toUpperCase();
+      if (msg.includes('OFFSET_INVALID') || msg.includes('LIMIT_INVALID')) {
         console.warn(`[MTProto] Out of bounds request [${start}-${end}]. Returning 416 EOF.`);
         return new ArrayBuffer(0);
       }
