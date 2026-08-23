@@ -3,7 +3,7 @@ import { AuthState } from '../../types/auth';
 import { QrCodeAuthView } from './QrCodeAuthView';
 import { PhoneAuthView } from './PhoneAuthView';
 import { ApiConfigView } from './ApiConfigView';
-import { Tv, QrCode, Smartphone, X } from 'lucide-react';
+import { QrCode, Smartphone, X } from 'lucide-react';
 import { tdlibClient } from '../../services/tdlib/tdlibClient';
 
 interface AuthModalProps {
