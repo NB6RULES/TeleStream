@@ -137,6 +137,8 @@ export const App: React.FC = () => {
               chatTitle={selectedChat ? selectedChat.title : 'All Videos'}
               isLoading={isLoadingVideos}
               onPlayVideo={(video) => setActiveVideo(video)}
+              isChatSelected={!!selectedChat}
+              onBack={() => setSelectedChat(null)}
             />
           </main>
         </>
