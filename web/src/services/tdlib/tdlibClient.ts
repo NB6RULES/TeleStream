@@ -1041,14 +1041,16 @@ class RealTelegramClient {
           );
 
           if (result && result.bytes && result.bytes.length > 0) {
-            this.rawChunkCache.set(chunkKey, result.bytes);
+            
             // Max 200 chunks (100MB) to prevent memory leaks on mobile
             if (this.rawChunkCache.size > 200) {
               const firstKey = this.rawChunkCache.keys().next().value;
               if (firstKey) this.rawChunkCache.delete(firstKey);
             }
 
-            parts.push(result.bytes);
+            const copiedBuffer = Buffer.from(result.bytes);
+            this.rawChunkCache.set(chunkKey, copiedBuffer);
+            parts.push(copiedBuffer);
             fetched += result.bytes.length;
             // EOF check: if Telegram returned less than we asked for, we've hit the end of the file
             if (result.bytes.length < currentLimit) {
