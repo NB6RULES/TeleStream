@@ -1,30 +1,19 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { tdlibClient } from './services/tdlib/tdlibClient';
-import { AuthState } from './types/auth';
-import { TDLibChat, VideoItem, TDLibUser } from './types/tdlib';
-import { AuthModal } from './components/auth/AuthModal';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Navbar } from './components/common/Navbar';
 import { ChatSidebar } from './components/chat/ChatSidebar';
 import { VideoGrid } from './components/media/VideoGrid';
 import { CustomVideoPlayer } from './components/player/CustomVideoPlayer';
+import { AuthModal } from './components/auth/AuthModal';
 import { LandingPage } from './components/landing/LandingPage';
-import { registerServiceWorker, setChunkProvider } from './services/serviceWorker/registerServiceWorker';
+import { TDLibChat, VideoItem } from './types/tdlib';
+import { AuthState } from './types/auth';
 import { StreamRangeRequest } from './types/stream';
+import { tdlibClient } from './services/tdlib/tdlibClient';
+import { registerServiceWorker, setChunkProvider } from './services/serviceWorker/registerServiceWorker';
 import { fetchVideoChunk } from './services/streaming/streamManager';
 
 export const App: React.FC = () => {
-  const [authState, setAuthState] = useState<AuthState>(tdlibClient.getAuthState());
-  const [currentUser, setCurrentUser] = useState<TDLibUser | null>(tdlibClient.getCurrentUser());
-  const [chats, setChats] = useState<TDLibChat[]>([]);
-  const [selectedChat, setSelectedChat] = useState<TDLibChat | null>(null);
-  const [videos, setVideos] = useState<VideoItem[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [activeVideo, setActiveVideo] = useState<VideoItem | null>(null);
-  const [isLoadingChats, setIsLoadingChats] = useState(false);
-  const [isLoadingVideos, setIsLoadingVideos] = useState(false);
-  const [isServiceWorkerReady, setIsServiceWorkerReady] = useState(false);
-
-  // View state: 'landing' or 'player'
+  // Navigation State: 'landing' (default) vs 'player' (streamer platform)
   const [currentView, setCurrentView] = useState<'landing' | 'player'>(() => {
     if (typeof window !== 'undefined') {
       const hash = window.location.hash.toLowerCase();
@@ -36,16 +25,29 @@ export const App: React.FC = () => {
     return 'landing';
   });
 
-  // Listen for hash changes
+  const [authState, setAuthState] = useState<AuthState>(tdlibClient.getAuthState());
+  const [chats, setChats] = useState<TDLibChat[]>([]);
+  const [selectedChat, setSelectedChat] = useState<TDLibChat | null>(null);
+  const [videos, setVideos] = useState<VideoItem[]>([]);
+  const [activeVideo, setActiveVideo] = useState<VideoItem | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isLoadingChats, setIsLoadingChats] = useState(false);
+  const [isLoadingVideos, setIsLoadingVideos] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [currentUser, setCurrentUser] = useState(tdlibClient.getCurrentUser());
+
+  // Listen to URL hash changes for deep linking
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.toLowerCase();
-      if (hash === '#stream' || hash === '#player') {
+      const params = new URLSearchParams(window.location.search);
+      if (hash === '#stream' || hash === '#player' || params.get('stream') === 'true') {
         setCurrentView('player');
-      } else if (hash === '#home' || hash === '#landing' || hash === '') {
+      } else if (hash === '' || hash === '#home' || hash.startsWith('#platforms') || hash.startsWith('#features') || hash.startsWith('#ios') || hash.startsWith('#faq')) {
         setCurrentView('landing');
       }
     };
+
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
@@ -66,12 +68,7 @@ export const App: React.FC = () => {
       return await fetchVideoChunk(req);
     });
 
-    registerServiceWorker().then((ready) => {
-      setIsServiceWorkerReady(ready);
-      if (!ready) {
-        console.log('[App] Service Worker installed but not controlling yet. Video streaming available after refresh.');
-      }
-    });
+    registerServiceWorker();
   }, []);
 
   // Subscribe to TDLib Auth State
@@ -94,94 +91,110 @@ export const App: React.FC = () => {
         setSelectedChat(chatList[0]);
       }
     } catch (e) {
-      console.error('[Load Chats Error]', e);
+      console.error('[App] Failed to load chats', e);
     } finally {
       setIsLoadingChats(false);
     }
   }, [authState.isAuthenticated, selectedChat]);
 
   useEffect(() => {
-    if (authState.isAuthenticated && currentView === 'player') {
+    if (currentView === 'player' && authState.isAuthenticated) {
       loadChats();
     }
-  }, [authState.isAuthenticated, currentView, loadChats]);
+  }, [currentView, authState.isAuthenticated, loadChats]);
 
   // Fetch videos when selected chat changes
-  const loadVideos = useCallback(async () => {
-    if (!selectedChat) return;
+  const loadVideos = useCallback(async (chat: TDLibChat) => {
     setIsLoadingVideos(true);
     try {
-      const videoList = await tdlibClient.getChatVideos(selectedChat.id, selectedChat.title);
+      const videoList = await tdlibClient.getChatVideos(chat.id, chat.title);
       setVideos(videoList);
     } catch (e) {
-      console.error('[Load Videos Error]', e);
+      console.error('[App] Failed to load chat videos', e);
+      setVideos([]);
     } finally {
       setIsLoadingVideos(false);
     }
-  }, [selectedChat]);
+  }, []);
 
   useEffect(() => {
-    if (selectedChat && currentView === 'player') {
-      loadVideos();
+    if (selectedChat) {
+      loadVideos(selectedChat);
     }
-  }, [selectedChat, currentView, loadVideos]);
+  }, [selectedChat, loadVideos]);
 
-  // Filter videos by search query
-  const filteredVideos = videos.filter((v) => {
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      v.title.toLowerCase().includes(q) ||
-      v.fileName.toLowerCase().includes(q) ||
-      (v.caption && v.caption.toLowerCase().includes(q))
-    );
-  });
+  const handleSelectChat = (chat: TDLibChat) => {
+    setSelectedChat(chat);
+  };
+
+  const handleRefresh = async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      await loadChats();
+      if (selectedChat) {
+        await loadVideos(selectedChat);
+      }
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await tdlibClient.logOut();
+    setChats([]);
+    setSelectedChat(null);
+    setVideos([]);
+    setActiveVideo(null);
+  };
+
+  const filteredVideos = videos.filter((v) =>
+    (v.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (v.fileName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (v.caption || '').toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#0b0f19] text-slate-100 selection:bg-telegram-blue selection:text-white">
-      {/* ---------------- VIEW 1: LANDING PAGE ---------------- */}
-      {currentView === 'landing' ? (
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-sky-500 selection:text-white">
+      {/* LANDING PAGE VIEW */}
+      {currentView === 'landing' && (
         <LandingPage
           onLaunchWeb={() => navigateTo('player')}
           currentUser={currentUser}
           isAuthenticated={authState.isAuthenticated}
         />
-      ) : (
-        /* ---------------- VIEW 2: STREAMING WEBAPP ---------------- */
-        <div className="min-h-screen flex flex-col">
-          {/* Auth Modal Overlay when in player view and not authenticated */}
+      )}
+
+      {/* STREAMER PLATFORM VIEW */}
+      {currentView === 'player' && (
+        <div className="flex-1 flex flex-col h-screen overflow-hidden">
+          {/* Edge-to-Edge Navigation Bar */}
+          <Navbar
+            user={currentUser}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            onLogout={handleLogout}
+            onRefresh={handleRefresh}
+            isRefreshing={isRefreshing}
+            onBackToHome={() => navigateTo('landing', '#home')}
+          />
+
+          {/* Authentication Modal if not logged into Telegram MTProto */}
           {!authState.isAuthenticated && (
             <AuthModal
               authState={authState}
-              onBackToHome={() => navigateTo('landing')}
+              onBackToHome={() => navigateTo('landing', '#home')}
             />
           )}
 
-          {/* Main App Layout */}
+          {/* Main 2-Pane Content Area */}
           {authState.isAuthenticated && (
             <>
-              <Navbar
-                user={currentUser}
-                searchQuery={searchQuery}
-                onSearchChange={setSearchQuery}
-                onLogout={() => {
-                  tdlibClient.logOut();
-                  navigateTo('landing');
-                }}
-                onRefresh={() => {
-                  loadChats();
-                  loadVideos();
-                }}
-                onBackToHome={() => navigateTo('landing')}
-                isRefreshing={isLoadingChats || isLoadingVideos}
-                isServiceWorkerReady={isServiceWorkerReady}
-              />
-
-              <main className="flex-1 flex flex-col md:flex-row overflow-hidden">
+              <main className="flex-1 flex overflow-hidden">
                 <ChatSidebar
                   chats={chats}
-                  selectedChatId={selectedChat?.id || null}
-                  onSelectChat={(chat) => setSelectedChat(chat)}
+                  selectedChatId={selectedChat ? selectedChat.id : null}
+                  onSelectChat={handleSelectChat}
                   isLoading={isLoadingChats}
                 />
 
@@ -197,34 +210,10 @@ export const App: React.FC = () => {
 
           {/* Active Video Player Modal */}
           {activeVideo && (
-            isServiceWorkerReady ? (
-              <CustomVideoPlayer
-                video={activeVideo}
-                onClose={() => setActiveVideo(null)}
-              />
-            ) : (
-              <div style={{
-                position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                backgroundColor: '#000', color: '#fff', zIndex: 9999,
-                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'
-              }}>
-                <h2>Streaming Engine Not Ready</h2>
-                <p>The Service Worker was bypassed (likely due to a Hard Refresh).</p>
-                <p>Video streaming requires the local stream interceptor.</p>
-                <button 
-                  onClick={() => window.location.reload()}
-                  style={{ marginTop: '20px', padding: '10px 20px', fontSize: '16px', cursor: 'pointer' }}
-                >
-                  Reload Page Normally
-                </button>
-                <button 
-                  onClick={() => setActiveVideo(null)}
-                  style={{ marginTop: '10px', padding: '10px 20px', fontSize: '16px', cursor: 'pointer', background: 'transparent', border: '1px solid #fff', color: '#fff' }}
-                >
-                  Cancel
-                </button>
-              </div>
-            )
+            <CustomVideoPlayer
+              video={activeVideo}
+              onClose={() => setActiveVideo(null)}
+            />
           )}
         </div>
       )}

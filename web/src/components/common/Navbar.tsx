@@ -7,10 +7,10 @@ interface NavbarProps {
   searchQuery: string;
   onSearchChange: (q: string) => void;
   onLogout: () => void;
-  onRefresh: () => void;
+  onRefresh?: () => void;
   onBackToHome?: () => void;
-  isRefreshing: boolean;
-  isServiceWorkerReady: boolean;
+  isRefreshing?: boolean;
+  isServiceWorkerReady?: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -20,7 +20,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onLogout,
   onRefresh,
   onBackToHome,
-  isRefreshing,
+  isRefreshing = false,
 }) => {
   return (
     <header className="sticky top-0 z-30 w-full bg-slate-900/90 backdrop-blur-xl border-b border-slate-800 px-2 sm:px-4 lg:px-6 py-2.5">
@@ -70,14 +70,16 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Right: Refresh, User Profile & Actions positioned close to the edge */}
         <div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0">
-          <button
-            type="button"
-            onClick={onRefresh}
-            className="p-2 rounded-xl bg-slate-800/70 hover:bg-slate-700/70 border border-slate-700/60 text-slate-300 hover:text-white transition-all cursor-pointer"
-            title="Refresh videos"
-          >
-            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-          </button>
+          {onRefresh && (
+            <button
+              type="button"
+              onClick={onRefresh}
+              className="p-2 rounded-xl bg-slate-800/70 hover:bg-slate-700/70 border border-slate-700/60 text-slate-300 hover:text-white transition-all cursor-pointer"
+              title="Refresh videos"
+            >
+              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            </button>
+          )}
 
           {user && (
             <div className="flex items-center space-x-2 sm:space-x-2.5 pl-2 border-l border-slate-800">
