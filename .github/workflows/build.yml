@@ -3,9 +3,10 @@
 on:
   push:
     branches: [ "main" ]
-    paths-ignore:
-      - 'web/**'
-      - '.github/workflows/deploy-web.yml'
+    paths:
+      - 'TeleStream/**'
+      - 'project.yml'
+      - '.github/workflows/build.yml'
   workflow_dispatch:
 
 permissions:
