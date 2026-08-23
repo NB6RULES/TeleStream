@@ -16,8 +16,8 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Intercept virtual video stream requests
-  if (url.pathname.startsWith(STREAM_PREFIX) || url.hostname === 'local.stream') {
+  // Intercept virtual video stream requests (supports subdirectories like /TeleStream/ on GitHub Pages)
+  if (url.pathname.includes(STREAM_PREFIX) || url.hostname === 'local.stream') {
     event.respondWith(handleRangeStreamRequest(event.request, url));
   }
 });
