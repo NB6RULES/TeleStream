@@ -1,4 +1,4 @@
-import { TelegramClient, Api } from 'telegram';
+﻿import { TelegramClient, Api } from 'telegram';
 import { StringSession } from 'telegram/sessions';
 import { TDLibChat, TDLibUser, VideoItem } from '../../types/tdlib';
 import { AuthState } from '../../types/auth';
@@ -28,6 +28,7 @@ const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> => {
 class RealTelegramClient {
   private static instance: RealTelegramClient;
   private client: TelegramClient | null = null;
+  private rawChunkCache = new Map<string, Buffer>();
   private apiId = Number(import.meta.env.VITE_TELEGRAM_API_ID || 0);
   private apiHash = import.meta.env.VITE_TELEGRAM_API_HASH || '';
 
@@ -965,7 +966,7 @@ class RealTelegramClient {
   // Download a specific byte range from Telegram MTProto for Range Streaming.
   //
   // KEY INSIGHT: GramJS iterDownload auto-calculates limit = ceil(fileSize / chunkSize).
-  // If we pass file: msg.media, getFileInfo() extracts the FULL file size → downloads everything.
+  // If we pass file: msg.media, getFileInfo() extracts the FULL file size â†’ downloads everything.
   // Fix: pass InputDocumentFileLocation (getFileInfo returns size=undefined) with an explicit
   // fileSize equal to ONLY the bytes we need. GramJS then stops after those bytes.
   public async downloadFileChunk(fileId: number | string, start: number, end: number): Promise<ArrayBuffer> {
@@ -997,7 +998,7 @@ class RealTelegramClient {
     const alignedEnd = Math.ceil((end + 1) / ALIGNMENT) * ALIGNMENT;
     const totalNeeded = alignedEnd - alignedStart;
 
-    // Build a bare InputDocumentFileLocation — getFileInfo() will return size=undefined for this,
+    // Build a bare InputDocumentFileLocation â€” getFileInfo() will return size=undefined for this,
     // so iterDownload won't auto-calculate a huge limit from the full file size.
     const location = new Api.InputDocumentFileLocation({
       id: doc.id,
@@ -1017,6 +1018,17 @@ class RealTelegramClient {
       while (fetched < totalNeeded) {
         const partOffset = alignedStart + fetched;
         const currentLimit = 512 * 1024; // ALWAYS 512KB to avoid MTProto LIMIT_INVALID and GenericDownloadIter corruption
+        
+        const chunkKey = `${doc.id.toString()}_${partOffset}`;
+        if (this.rawChunkCache.has(chunkKey)) {
+            const cachedPart = this.rawChunkCache.get(chunkKey)!;
+            parts.push(cachedPart);
+            fetched += cachedPart.length;
+            if (cachedPart.length < currentLimit) {
+              break;
+            }
+            continue;
+        }
 
         try {
           const result = await (this.client as any).invokeWithSender(
@@ -1029,6 +1041,13 @@ class RealTelegramClient {
           );
 
           if (result && result.bytes && result.bytes.length > 0) {
+            this.rawChunkCache.set(chunkKey, result.bytes);
+            // Max 200 chunks (100MB) to prevent memory leaks on mobile
+            if (this.rawChunkCache.size > 200) {
+              const firstKey = this.rawChunkCache.keys().next().value;
+              if (firstKey) this.rawChunkCache.delete(firstKey);
+            }
+
             parts.push(result.bytes);
             fetched += result.bytes.length;
             // EOF check: if Telegram returned less than we asked for, we've hit the end of the file
