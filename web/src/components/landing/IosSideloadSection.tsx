@@ -52,9 +52,10 @@ export const IosSideloadSection: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'altstore' | 'sidestore' | 'sideloadly' | 'trollstore'>('altstore');
   const [isCopied, setIsCopied] = useState(false);
 
-  const SOURCE_URL = 'https://raw.githubusercontent.com/telestream/releases/main/altstore-source.json';
-  const LATEST_VERSION = 'v1.4.2';
-  const LATEST_IPA_URL = 'https://github.com/NB6RULES/telestream/releases/latest';
+  // Exact live repository URLs from NB6RULES/TeleStream
+  const SOURCE_URL = 'https://raw.githubusercontent.com/NB6RULES/TeleStream/main/sources.json';
+  const LATEST_VERSION = 'v1.40';
+  const LATEST_IPA_URL = 'https://github.com/NB6RULES/TeleStream/releases/latest/download/TeleStream.ipa';
 
   const copySourceUrl = () => {
     navigator.clipboard.writeText(SOURCE_URL);
@@ -112,6 +113,7 @@ export const IosSideloadSection: React.FC = () => {
                 type="button"
                 onClick={handleAltStoreInstall}
                 className="py-3 px-4 rounded-2xl bg-slate-800/90 hover:bg-slate-750 border border-slate-700 hover:border-teal-500/50 text-white font-semibold text-xs sm:text-sm flex items-center justify-center space-x-2 transition-all cursor-pointer"
+                title="Add repository to AltStore"
               >
                 <AltStoreIcon className="w-4 h-4" />
                 <span>Add to AltStore</span>
@@ -123,6 +125,7 @@ export const IosSideloadSection: React.FC = () => {
                 type="button"
                 onClick={handleSideStoreInstall}
                 className="py-3 px-4 rounded-2xl bg-slate-800/90 hover:bg-slate-750 border border-slate-700 hover:border-indigo-500/50 text-white font-semibold text-xs sm:text-sm flex items-center justify-center space-x-2 transition-all cursor-pointer"
+                title="Add repository to SideStore"
               >
                 <SideStoreIcon className="w-4 h-4" />
                 <span>Add to SideStore</span>
@@ -134,6 +137,7 @@ export const IosSideloadSection: React.FC = () => {
                 type="button"
                 onClick={copySourceUrl}
                 className="py-3 px-4 rounded-2xl bg-slate-800/90 hover:bg-slate-750 border border-slate-700 hover:border-sky-500/50 text-white font-semibold text-xs sm:text-sm flex items-center justify-center space-x-2 transition-all cursor-pointer"
+                title="Copy source URL to clipboard"
               >
                 {isCopied ? (
                   <>
