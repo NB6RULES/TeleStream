@@ -937,7 +937,6 @@ class PlayerViewModel: ObservableObject {
         if isMKV {
             UIView.animate(withDuration: 0.25) {
                 self.ksPlayerView?.contentMode = (self.videoGravity == .resizeAspect) ? .scaleAspectFit : .scaleAspectFill
-                self.ksPlayerView?.playerLayer?.videoGravity = (self.videoGravity == .resizeAspect) ? .resizeAspect : .resizeAspectFill
             }
         }
         resetControlsTimer()
@@ -1396,7 +1395,6 @@ struct KSVideoPlayerSurfaceView: UIViewRepresentable {
         playerView.isUserInteractionEnabled = false // Prevent KSPlayer from intercepting gestures
         playerView.backgroundColor = .black
         playerView.contentMode = (viewModel.videoGravity == .resizeAspect) ? .scaleAspectFit : .scaleAspectFill
-        playerView.playerLayer?.videoGravity = (viewModel.videoGravity == .resizeAspect) ? .resizeAspect : .resizeAspectFill
 
         // Disable internal gestures on KSPlayer so our GestureOverlayView has full priority
         for g in playerView.gestureRecognizers ?? [] {
@@ -1411,7 +1409,6 @@ struct KSVideoPlayerSurfaceView: UIViewRepresentable {
     func updateUIView(_ uiView: CustomKSPlayerView, context: Context) {
         UIView.animate(withDuration: 0.25) {
             uiView.contentMode = (viewModel.videoGravity == .resizeAspect) ? .scaleAspectFit : .scaleAspectFill
-            uiView.playerLayer?.videoGravity = (viewModel.videoGravity == .resizeAspect) ? .resizeAspect : .resizeAspectFill
         }
     }
 }
