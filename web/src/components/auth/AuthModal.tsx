@@ -3,14 +3,15 @@ import { AuthState } from '../../types/auth';
 import { QrCodeAuthView } from './QrCodeAuthView';
 import { PhoneAuthView } from './PhoneAuthView';
 import { ApiConfigView } from './ApiConfigView';
-import { QrCode, Smartphone, X } from 'lucide-react';
+import { Tv, QrCode, Smartphone, X, ArrowLeft } from 'lucide-react';
 import { tdlibClient } from '../../services/tdlib/tdlibClient';
 
 interface AuthModalProps {
   authState: AuthState;
+  onBackToHome?: () => void;
 }
 
-export const AuthModal: React.FC<AuthModalProps> = ({ authState }) => {
+export const AuthModal: React.FC<AuthModalProps> = ({ authState, onBackToHome }) => {
   const [activeTab, setActiveTab] = useState<'qr' | 'phone'>('qr');
   const [showApiConfig, setShowApiConfig] = useState(false);
 
@@ -32,7 +33,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({ authState }) => {
         {/* Header Branding */}
         <div className="flex items-center justify-between pb-3 mb-3.5 border-b border-slate-800/80">
           <div className="flex items-center space-x-2.5">
-            <img src={`${import.meta.env.BASE_URL}AppIcon.png`} alt="TeleStream Logo" className="w-9 h-9 rounded-xl shadow-md shadow-telegram-blue/25" />
+            {onBackToHome && (
+              <button
+                type="button"
+                onClick={onBackToHome}
+                className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white cursor-pointer mr-0.5"
+                title="Back to Landing Page"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+            )}
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-telegram-blue to-sky-400 flex items-center justify-center text-white shadow-md shadow-telegram-blue/25">
+              <Tv className="w-4 h-4" />
+            </div>
             <div>
               <span className="font-bold text-white tracking-tight text-sm block leading-none">
                 TeleStream Web
@@ -43,9 +56,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({ authState }) => {
             </div>
           </div>
 
-          <div className="flex items-center space-x-1 text-[11px] px-2 py-0.5 rounded-full bg-slate-800/80 border border-slate-700/60 text-slate-300">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span>Zero Backend</span>
+          <div className="flex items-center space-x-1.5">
+            <div className="flex items-center space-x-1 text-[11px] px-2 py-0.5 rounded-full bg-slate-800/80 border border-slate-700/60 text-slate-300">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span>Zero Backend</span>
+            </div>
+            {onBackToHome && (
+              <button
+                type="button"
+                onClick={onBackToHome}
+                className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
+                title="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
 

@@ -1,15 +1,13 @@
 import React, { useState } from 'react';
 import { VideoItem } from '../../types/tdlib';
 import { VideoCard } from './VideoCard';
-import { Film, ArrowUpDown, ChevronLeft } from 'lucide-react';
+import { Film, ArrowUpDown } from 'lucide-react';
 
 interface VideoGridProps {
   videos: VideoItem[];
   chatTitle: string;
   isLoading: boolean;
   onPlayVideo: (video: VideoItem) => void;
-  onBack?: () => void;
-  isChatSelected?: boolean;
 }
 
 export const VideoGrid: React.FC<VideoGridProps> = ({
@@ -17,8 +15,6 @@ export const VideoGrid: React.FC<VideoGridProps> = ({
   chatTitle,
   isLoading,
   onPlayVideo,
-  onBack,
-  isChatSelected = false,
 }) => {
   const [sortBy, setSortBy] = useState<'recent' | 'size' | 'duration'>('recent');
 
@@ -29,20 +25,11 @@ export const VideoGrid: React.FC<VideoGridProps> = ({
   });
 
   return (
-    <div className={`flex-1 flex-col h-[calc(100vh-65px)] overflow-y-auto bg-slate-950/40 p-4 lg:p-8 ${!isChatSelected ? 'hidden md:flex' : 'flex'}`}>
+    <div className="flex-1 flex flex-col h-[calc(100vh-65px)] overflow-y-auto bg-slate-950/40 p-4 lg:p-8">
       {/* Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-800/80 mb-6">
         <div>
           <div className="flex items-center space-x-2">
-            {onBack && (
-              <button
-                type="button"
-                onClick={onBack}
-                className="md:hidden p-1.5 -ml-1.5 mr-1 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition-colors cursor-pointer flex items-center justify-center"
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-            )}
             <h2 className="text-xl font-bold text-white tracking-tight">{chatTitle}</h2>
             <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono">
               {videos.length} Videos

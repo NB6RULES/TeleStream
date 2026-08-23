@@ -1,7 +1,12 @@
 /* eslint-disable no-restricted-globals */
 // TeleStream Web - Local Virtual HTTP Stream Server (Mirroring iOS LocalStreamServer)
-const SW_VERSION = 'v1.0.3';
+const SW_VERSION = 'v2.0.0';
 const STREAM_PREFIX = '/api/stream/video';
+
+// ─── CHUNK WINDOW: 2MB per range response ─────────────────────────
+// Doubled from 1MB → 2MB to reduce round-trips and let the browser buffer further ahead.
+// Must match the CHUNK_WINDOW constant in streamManager.ts prefetch logic.
+const CHUNK_WINDOW = 2 * 1024 * 1024;
 
 self.addEventListener('install', (event) => {
   console.log('[ServiceWorker] Installed TeleStream Loopback Engine:', SW_VERSION);
@@ -16,8 +21,8 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Intercept virtual video stream requests (supports subdirectories like /TeleStream/ on GitHub Pages)
-  if (url.pathname.includes(STREAM_PREFIX) || url.hostname === 'local.stream') {
+  // Intercept virtual video stream requests
+  if (url.pathname.startsWith(STREAM_PREFIX) || url.hostname === 'local.stream') {
     event.respondWith(handleRangeStreamRequest(event.request, url));
   }
 });
@@ -29,7 +34,7 @@ async function handleRangeStreamRequest(request, url) {
   const rangeHeader = request.headers.get('range');
 
   let start = 0;
-  let end = totalSize > 0 ? totalSize - 1 : 1024 * 1024 - 1;
+  let end = totalSize > 0 ? Math.min(CHUNK_WINDOW - 1, totalSize - 1) : CHUNK_WINDOW - 1;
 
   if (rangeHeader) {
     const parts = rangeHeader.replace(/bytes=/, '').split('-');
@@ -37,17 +42,15 @@ async function handleRangeStreamRequest(request, url) {
     if (parts[1] && parts[1].length > 0) {
       end = parseInt(parts[1], 10);
     } else {
-      // 1 MB streaming chunk window (matching iOS LocalStreamServer.swift)
-      const CHUNK_WINDOW = 1024 * 1024;
+      // Open-ended range: serve 2MB window from start
       end = totalSize > 0 ? Math.min(start + CHUNK_WINDOW - 1, totalSize - 1) : start + CHUNK_WINDOW - 1;
     }
-  } else {
-    // If no range requested, provide first 1MB chunk
-    const CHUNK_WINDOW = 1024 * 1024;
-    end = totalSize > 0 ? Math.min(start + CHUNK_WINDOW - 1, totalSize - 1) : start + CHUNK_WINDOW - 1;
   }
 
-  const contentLength = end - start + 1;
+  // Clamp end to file boundary
+  if (totalSize > 0 && end >= totalSize) {
+    end = totalSize - 1;
+  }
 
   try {
     const chunkData = await requestDataChunkFromClient(fileId, start, end, totalSize);
@@ -74,7 +77,7 @@ async function handleRangeStreamRequest(request, url) {
         'Content-Range': `bytes ${start}-${actualEnd}/${totalSize || '*'}`,
         'Content-Length': actualLength.toString(),
         'Accept-Ranges': 'bytes',
-        'Cache-Control': 'no-cache, no-store',
+        'Cache-Control': 'private, max-age=300',
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Expose-Headers': 'Content-Range, Content-Length, Accept-Ranges',
       },
@@ -90,7 +93,7 @@ async function handleRangeStreamRequest(request, url) {
   }
 }
 
-// Request chunk from the active window client via MessageChannel (0ms postMessage bridge)
+// Request chunk from the active window client via MessageChannel
 function requestDataChunkFromClient(fileId, start, end, totalSize) {
   return new Promise(async (resolve, reject) => {
     const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
@@ -100,7 +103,11 @@ function requestDataChunkFromClient(fileId, start, end, totalSize) {
     }
 
     const messageChannel = new MessageChannel();
+    let settled = false;
+
     messageChannel.port1.onmessage = (event) => {
+      if (settled) return;
+      settled = true;
       if (event.data && event.data.error) {
         reject(new Error(event.data.error));
       } else if (event.data && event.data.chunk) {
@@ -118,9 +125,12 @@ function requestDataChunkFromClient(fileId, start, end, totalSize) {
       [messageChannel.port2]
     );
 
-    // Timeout safety
+    // Timeout safety — reduced from 30s to 20s since we now have retries upstream
     setTimeout(() => {
-      reject(new Error('Fetch chunk timeout (30s)'));
-    }, 30000);
+      if (!settled) {
+        settled = true;
+        reject(new Error('Fetch chunk timeout (20s)'));
+      }
+    }, 20000);
   });
 }

@@ -16,9 +16,8 @@ export async function registerServiceWorker(): Promise<boolean> {
   }
 
   try {
-    const base = import.meta.env.BASE_URL || '/';
-    const registration = await navigator.serviceWorker.register(`${base}sw.js`, {
-      scope: base,
+    const registration = await navigator.serviceWorker.register('/sw.js', {
+      scope: '/',
     });
 
     // Force check for updated sw.js on every page load
