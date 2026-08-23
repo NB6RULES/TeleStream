@@ -591,7 +591,7 @@ class RealTelegramClient {
         }
 
         try {
-          const photoBuf = await withTimeout(this.client!.downloadProfilePhoto(entity, { isBig: false }), 4000);
+          const photoBuf = await withTimeout(this.client!.downloadProfilePhoto(entity, { isBig: false }), 15000);
           if (photoBuf && (photoBuf as any).length > 0) {
             const blob = new Blob([new Uint8Array(photoBuf as any)], { type: 'image/jpeg' });
             saveMediaToCache(`chat_${chatId}`, blob); // Save to IndexedDB
@@ -763,7 +763,7 @@ class RealTelegramClient {
         }
 
         try {
-          const thumbBuf = await withTimeout(this.client!.downloadMedia(media, { thumb: 1 }), 4000);
+          const thumbBuf = await withTimeout(this.client!.downloadMedia(media, { thumb: 1 }), 15000);
           if (thumbBuf && (thumbBuf as any).length > 0) {
             const blob = new Blob([new Uint8Array(thumbBuf as any)], { type: 'image/jpeg' });
             saveMediaToCache(`thumb_${messageId}`, blob); // Save to IndexedDB
@@ -774,7 +774,7 @@ class RealTelegramClient {
         } catch {}
 
         try {
-          const thumbBuf2 = await withTimeout(this.client!.downloadMedia(media, { thumb: 0 }), 4000);
+          const thumbBuf2 = await withTimeout(this.client!.downloadMedia(media, { thumb: 0 }), 15000);
           if (thumbBuf2 && (thumbBuf2 as any).length > 0) {
             const blob = new Blob([new Uint8Array(thumbBuf2 as any)], { type: 'image/jpeg' });
             saveMediaToCache(`thumb_${messageId}`, blob); // Save to IndexedDB
