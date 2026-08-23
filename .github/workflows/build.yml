@@ -1,8 +1,11 @@
-name: Build iOS
+﻿name: Build iOS
 
 on:
   push:
     branches: [ "main" ]
+    paths-ignore:
+      - 'web/**'
+      - '.github/workflows/deploy-web.yml'
   workflow_dispatch:
 
 permissions:
