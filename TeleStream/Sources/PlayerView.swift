@@ -937,6 +937,7 @@ class PlayerViewModel: ObservableObject {
         if isMKV {
             UIView.animate(withDuration: 0.25) {
                 self.ksPlayerView?.contentMode = (self.videoGravity == .resizeAspect) ? .scaleAspectFit : .scaleAspectFill
+                self.ksPlayerView?.playerLayer?.videoGravity = (self.videoGravity == .resizeAspect) ? .resizeAspect : .resizeAspectFill
             }
         }
         resetControlsTimer()
@@ -1139,14 +1140,17 @@ class PlayerViewModel: ObservableObject {
 
     private func restorePosition() {
         if let saved = AppSettings.shared.playbackPositions[currentFileId], saved > 3 {
-            if isMKV {
-                ksPlayerView?.playerLayer?.player.seek(time: saved) { _ in }
-            } else {
-                let time = CMTime(seconds: saved, preferredTimescale: 600)
-                player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                guard let self = self else { return }
+                if self.isMKV {
+                    self.ksPlayerView?.playerLayer?.player.seek(time: saved) { _ in }
+                } else {
+                    let time = CMTime(seconds: saved, preferredTimescale: 600)
+                    self.player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
+                }
+                self.currentPosition = saved
+                self.lastSaveTime = saved
             }
-            currentPosition = saved
-            lastSaveTime = saved
         }
     }
 
@@ -1353,24 +1357,12 @@ class GestureCoordinator: NSObject, UIGestureRecognizerDelegate {
 }
 
 // Custom KSPlayer subclass to hook into player state transitions
-final class CustomKSPlayerView: IOSVideoPlayerView {
+final class CustomKSPlayerView: KSVideoPlayerView {
     var onStateChange: ((KSPlayerState) -> Void)?
 
     override func player(layer: KSPlayerLayer, state: KSPlayerState) {
         super.player(layer: layer, state: state)
         onStateChange?(state)
-    }
-
-    override func updateUI(isLandscape: Bool) {
-        super.updateUI(isLandscape: isLandscape)
-        toolBar.isHidden = true
-        navigationBar.isHidden = true
-        subviews.forEach { view in
-            // Hide all KSPlayer specific subviews except the playerLayer which is a CALayer
-            if view != self {
-                view.isHidden = true
-            }
-        }
     }
 }
 
@@ -1388,10 +1380,9 @@ struct KSVideoPlayerSurfaceView: UIViewRepresentable {
         KSOptions.isSeekedAutoPlay = true
 
         let playerView = CustomKSPlayerView()
-        playerView.toolBar.isHidden = true
-        playerView.navigationBar.isHidden = true
         playerView.backgroundColor = .black
         playerView.contentMode = (viewModel.videoGravity == .resizeAspect) ? .scaleAspectFit : .scaleAspectFill
+        playerView.playerLayer?.videoGravity = (viewModel.videoGravity == .resizeAspect) ? .resizeAspect : .resizeAspectFill
 
         // Disable internal gestures on KSPlayer so our GestureOverlayView has full priority
         for g in playerView.gestureRecognizers ?? [] {
@@ -1406,6 +1397,7 @@ struct KSVideoPlayerSurfaceView: UIViewRepresentable {
     func updateUIView(_ uiView: CustomKSPlayerView, context: Context) {
         UIView.animate(withDuration: 0.25) {
             uiView.contentMode = (viewModel.videoGravity == .resizeAspect) ? .scaleAspectFit : .scaleAspectFill
+            uiView.playerLayer?.videoGravity = (viewModel.videoGravity == .resizeAspect) ? .resizeAspect : .resizeAspectFill
         }
     }
 }
