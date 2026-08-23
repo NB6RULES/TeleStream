@@ -1357,12 +1357,23 @@ class GestureCoordinator: NSObject, UIGestureRecognizerDelegate {
 }
 
 // Custom KSPlayer subclass to hook into player state transitions
-final class CustomKSPlayerView: KSVideoPlayerView {
+final class CustomKSPlayerView: IOSVideoPlayerView {
     var onStateChange: ((KSPlayerState) -> Void)?
 
     override func player(layer: KSPlayerLayer, state: KSPlayerState) {
         super.player(layer: layer, state: state)
         onStateChange?(state)
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        // Hide all subviews completely to remove the KSPlayer timeline
+        self.subviews.forEach { view in
+            view.isHidden = true
+            view.alpha = 0
+        }
+        self.toolBar.isHidden = true
+        self.navigationBar.isHidden = true
     }
 }
 
@@ -1380,6 +1391,9 @@ struct KSVideoPlayerSurfaceView: UIViewRepresentable {
         KSOptions.isSeekedAutoPlay = true
 
         let playerView = CustomKSPlayerView()
+        playerView.toolBar.isHidden = true
+        playerView.navigationBar.isHidden = true
+        playerView.isUserInteractionEnabled = false // Prevent KSPlayer from intercepting gestures
         playerView.backgroundColor = .black
         playerView.contentMode = (viewModel.videoGravity == .resizeAspect) ? .scaleAspectFit : .scaleAspectFill
         playerView.playerLayer?.videoGravity = (viewModel.videoGravity == .resizeAspect) ? .resizeAspect : .resizeAspectFill
