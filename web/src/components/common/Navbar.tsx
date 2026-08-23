@@ -25,7 +25,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
         {/* Clean Logo */}
         <div className="flex items-center space-x-3 flex-shrink-0">
-          <img src="/AppIcon.png" alt="TeleStream Logo" className="w-9 h-9 rounded-xl shadow-md shadow-telegram-blue/20" />
+          <img src={`${import.meta.env.BASE_URL}AppIcon.png`} alt="TeleStream Logo" className="w-9 h-9 rounded-xl shadow-md shadow-telegram-blue/20" />
           <span className="font-bold text-white tracking-tight text-lg leading-none">
             TeleStream
           </span>

@@ -32,9 +32,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ authState }) => {
         {/* Header Branding */}
         <div className="flex items-center justify-between pb-3 mb-3.5 border-b border-slate-800/80">
           <div className="flex items-center space-x-2.5">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-telegram-blue to-sky-400 flex items-center justify-center text-white shadow-md shadow-telegram-blue/25">
-              <Tv className="w-4 h-4" />
-            </div>
+            <img src={`${import.meta.env.BASE_URL}AppIcon.png`} alt="TeleStream Logo" className="w-9 h-9 rounded-xl shadow-md shadow-telegram-blue/25" />
             <div>
               <span className="font-bold text-white tracking-tight text-sm block leading-none">
                 TeleStream Web
