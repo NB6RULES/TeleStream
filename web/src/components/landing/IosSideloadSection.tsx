@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Smartphone,
   ExternalLink,
@@ -51,11 +51,40 @@ const TrollStoreIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
 export const IosSideloadSection: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'altstore' | 'sidestore' | 'sideloadly' | 'trollstore'>('altstore');
   const [isCopied, setIsCopied] = useState(false);
+  const [latestVersion, setLatestVersion] = useState<string>('v1.40');
 
   // Exact live repository URLs from NB6RULES/TeleStream
   const SOURCE_URL = 'https://raw.githubusercontent.com/NB6RULES/TeleStream/main/sources.json';
-  const LATEST_VERSION = 'v1.40';
   const LATEST_IPA_URL = 'https://github.com/NB6RULES/TeleStream/releases/latest/download/TeleStream.ipa';
+
+  useEffect(() => {
+    // Dynamically fetch latest version from GitHub Releases API with sources.json fallback
+    const fetchLatestVersion = async () => {
+      try {
+        const res = await fetch('https://api.github.com/repos/NB6RULES/TeleStream/releases/latest');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.tag_name) {
+            setLatestVersion(data.tag_name.startsWith('v') ? data.tag_name : `v${data.tag_name}`);
+            return;
+          }
+        }
+      } catch {}
+
+      try {
+        const sourceRes = await fetch(SOURCE_URL);
+        if (sourceRes.ok) {
+          const sourceData = await sourceRes.json();
+          if (sourceData.apps?.[0]?.version) {
+            const ver = sourceData.apps[0].version;
+            setLatestVersion(ver.startsWith('v') ? ver : `v${ver}`);
+          }
+        }
+      } catch {}
+    };
+
+    fetchLatestVersion();
+  }, []);
 
   const copySourceUrl = () => {
     navigator.clipboard.writeText(SOURCE_URL);
@@ -97,7 +126,7 @@ export const IosSideloadSection: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {/* Primary Direct IPA Download */}
+              {/* Primary Direct IPA Download with dynamic version */}
               <a
                 href={LATEST_IPA_URL}
                 target="_blank"
@@ -105,7 +134,7 @@ export const IosSideloadSection: React.FC = () => {
                 className="py-3 px-4 rounded-2xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-bold text-sm flex items-center justify-center space-x-2 shadow-lg shadow-sky-500/20 transition-all cursor-pointer group"
               >
                 <AppleIcon className="w-4 h-4 text-white" />
-                <span>Download .IPA ({LATEST_VERSION})</span>
+                <span>Download .IPA ({latestVersion})</span>
               </a>
 
               {/* AltStore 1-Click */}
