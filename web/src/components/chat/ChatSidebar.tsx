@@ -1,0 +1,137 @@
+import React, { useEffect, useState } from 'react';
+import { Bookmark, MessageSquare, Radio, Users, Film, CheckCircle } from 'lucide-react';
+import { TDLibChat } from '../../types/tdlib';
+import { tdlibClient } from '../../services/tdlib/tdlibClient';
+
+interface ChatSidebarProps {
+  chats: TDLibChat[];
+  selectedChatId: number | null;
+  onSelectChat: (chat: TDLibChat) => void;
+  isLoading: boolean;
+}
+
+const ChatAvatar: React.FC<{ chat: TDLibChat; getChatIcon: (c: TDLibChat) => React.ReactNode }> = ({ chat, getChatIcon }) => {
+  const [photoUrl, setPhotoUrl] = useState<string | null>(chat.photoUrl || null);
+  const avatarRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (photoUrl || !avatarRef.current) return;
+
+    let mounted = true;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          tdlibClient.getChatAvatar(chat.id).then((url) => {
+            if (mounted && url) setPhotoUrl(url);
+          });
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '50px' }
+    );
+
+    observer.observe(avatarRef.current);
+
+    return () => {
+      mounted = false;
+      observer.disconnect();
+    };
+  }, [chat.id, photoUrl]);
+
+  if (photoUrl) {
+    return (
+      <div ref={avatarRef} className="w-full h-full">
+        <img src={photoUrl} alt={chat.title} className="w-full h-full object-cover" />
+      </div>
+    );
+  }
+  return <div ref={avatarRef} className="w-full h-full flex items-center justify-center">{getChatIcon(chat)}</div>;
+};
+
+export const ChatSidebar: React.FC<ChatSidebarProps> = ({
+  chats,
+  selectedChatId,
+  onSelectChat,
+  isLoading,
+}) => {
+  const getChatIcon = (chat: TDLibChat) => {
+    if (chat.is_saved_messages || chat.title.toLowerCase().includes('saved')) {
+      return <Bookmark className="w-4 h-4 text-telegram-blue" />;
+    }
+    if (chat.type.is_channel) {
+      return <Radio className="w-4 h-4 text-purple-400" />;
+    }
+    if (chat.type['@type'] === 'chatTypeBasicGroup' || chat.type['@type'] === 'chatTypeSupergroup') {
+      return <Users className="w-4 h-4 text-amber-400" />;
+    }
+    return <MessageSquare className="w-4 h-4 text-slate-400" />;
+  };
+
+  return (
+    <aside className="w-full md:w-72 lg:w-80 flex-shrink-0 bg-slate-900/60 border-r border-slate-800/80 flex flex-col h-[calc(100vh-65px)]">
+      <div className="p-4 border-b border-slate-800/80 flex items-center justify-between">
+        <div className="flex items-center space-x-2">
+          <Film className="w-4 h-4 text-telegram-blue" />
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
+            Video Sources
+          </h3>
+        </div>
+        <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-slate-800 text-slate-400">
+          {chats.length} Chats
+        </span>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-2 space-y-1">
+        {isLoading ? (
+          <div className="p-4 space-y-3">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-12 rounded-xl bg-slate-800/50 animate-pulse" />
+            ))}
+          </div>
+        ) : chats.length === 0 ? (
+          <div className="p-6 text-center text-xs text-slate-500">
+            No chats found with video messages.
+          </div>
+        ) : (
+          chats.map((chat) => {
+            const isSelected = selectedChatId === chat.id;
+            return (
+              <button
+                key={chat.id}
+                type="button"
+                onClick={() => onSelectChat(chat)}
+                className={`w-full text-left p-3 rounded-xl transition-all flex items-center space-x-3 cursor-pointer group ${
+                  isSelected
+                    ? 'bg-gradient-to-r from-telegram-blue/20 to-sky-500/10 border border-telegram-blue/30 text-white shadow-sm'
+                    : 'hover:bg-slate-800/60 text-slate-300 hover:text-white border border-transparent'
+                }`}
+              >
+                <div
+                  className={`w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center flex-shrink-0 transition-colors ${
+                    isSelected ? 'bg-telegram-blue/20 ring-2 ring-telegram-blue/40' : 'bg-slate-800 group-hover:bg-slate-700'
+                  }`}
+                >
+                  <ChatAvatar chat={chat} getChatIcon={getChatIcon} />
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold truncate block leading-tight">
+                      {chat.title}
+                    </span>
+                    {isSelected && (
+                      <CheckCircle className="w-3.5 h-3.5 text-telegram-blue flex-shrink-0 ml-1" />
+                    )}
+                  </div>
+                  <span className="text-[11px] text-slate-500 truncate block mt-0.5">
+                    {chat.is_saved_messages ? 'Cloud Personal Archive' : 'Telegram Chat Stream'}
+                  </span>
+                </div>
+              </button>
+            );
+          })
+        )}
+      </div>
+    </aside>
+  );
+};
