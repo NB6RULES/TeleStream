@@ -6,12 +6,11 @@ A high-performance Telegram video streaming client, available for both **iOS** a
 
 ## 🌐 TeleStream Web
 
-The Web version of TeleStream runs entirely in your browser using a zero-backend WASM architecture. It acts as a local proxy to stream MTProto video chunks directly into a custom video player.
+The Web version of TeleStream runs entirely in your browser. It acts as a local proxy to stream MTProto video chunks directly into a custom video player.
 
 - 🚀 **[Launch TeleStream Web](https://NB6RULES.github.io/TeleStream/)**
 
 ### Web Features
-- **Zero Backend**: Connects directly to Telegram's official MTProto servers via WebAssembly (WASM).
 - **Instant Playback**: Streams video chunks dynamically using a local Service Worker interceptor.
 - **Picture-in-Picture**: Watch videos while navigating your chats.
 - **Persistent Caching**: Uses IndexedDB to cache thumbnails and avatars for lightning-fast subsequent loads.
