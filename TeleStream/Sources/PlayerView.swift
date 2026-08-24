@@ -729,10 +729,10 @@ class PlayerViewModel: ObservableObject {
     private var autoNextTimer: Timer?
     private var controlsTimer: Timer?
 
-    private var currentFileId: Int = 0
-    private var currentFileName: String = ""
-    private var currentFileSize: Int64 = 0
-    private var currentClient: TelegramClient?
+    var currentFileId: Int = 0
+    var currentFileName: String = ""
+    var currentFileSize: Int64 = 0
+    var currentClient: TelegramClient?
 
     var chatId: Int64 = 0
     var chatTitle: String = ""
