@@ -9,6 +9,8 @@ interface VideoGridProps {
   isLoading: boolean;
   onPlayVideo: (video: VideoItem) => void;
   onBack?: () => void;
+  searchQuery?: string;
+  onClearSearch?: () => void;
 }
 
 export const VideoGrid: React.FC<VideoGridProps> = ({
@@ -17,6 +19,8 @@ export const VideoGrid: React.FC<VideoGridProps> = ({
   isLoading,
   onPlayVideo,
   onBack,
+  searchQuery = '',
+  onClearSearch,
 }) => {
   const [sortBy, setSortBy] = useState<'recent' | 'size' | 'duration'>('recent');
 
@@ -108,10 +112,23 @@ export const VideoGrid: React.FC<VideoGridProps> = ({
             <Film className="w-8 h-8" />
           </div>
           <div className="space-y-1">
-            <h3 className="text-base font-semibold text-white">No videos in this chat</h3>
+            <h3 className="text-base font-semibold text-white">
+              {searchQuery ? `No videos matching "${searchQuery}"` : 'No videos in this chat'}
+            </h3>
             <p className="text-xs text-slate-400 max-w-sm">
-              Select another chat from the left sidebar or forward video files to Saved Messages.
+              {searchQuery
+                ? 'Try searching with a different term or keyword.'
+                : 'Select another chat from the left sidebar or forward video files to this chat.'}
             </p>
+            {searchQuery && onClearSearch && (
+              <button
+                type="button"
+                onClick={onClearSearch}
+                className="mt-3 inline-block px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition-all cursor-pointer"
+              >
+                Clear Search
+              </button>
+            )}
           </div>
         </div>
       ) : (

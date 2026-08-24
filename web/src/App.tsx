@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Search, X } from 'lucide-react';
 import { Navbar } from './components/common/Navbar';
 import { ChatSidebar } from './components/chat/ChatSidebar';
 import { VideoGrid } from './components/media/VideoGrid';
@@ -39,6 +40,7 @@ export const App: React.FC = () => {
   const [videos, setVideos] = useState<VideoItem[]>([]);
   const [activeVideo, setActiveVideo] = useState<VideoItem | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [chatSearchQuery, setChatSearchQuery] = useState('');
   const [isLoadingChats, setIsLoadingChats] = useState(false);
   const [isLoadingVideos, setIsLoadingVideos] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -214,6 +216,44 @@ export const App: React.FC = () => {
             onBackToHome={() => navigateTo('landing', '#home')}
           />
 
+          {/* Mobile Search Bar below Header */}
+          {authState.isAuthenticated && (
+            <div className="md:hidden px-3 py-2 bg-slate-900/90 border-b border-slate-800/80 backdrop-blur-md flex items-center space-x-2">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder={selectedChat ? `Search in ${selectedChat.title}...` : 'Search chats & channels...'}
+                  value={selectedChat ? searchQuery : chatSearchQuery}
+                  onChange={(e) => {
+                    if (selectedChat) {
+                      setSearchQuery(e.target.value);
+                    } else {
+                      setChatSearchQuery(e.target.value);
+                    }
+                  }}
+                  className="w-full pl-9 pr-8 py-1.5 bg-slate-800/80 border border-slate-700/60 rounded-xl text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-telegram-blue focus:ring-1 focus:ring-telegram-blue transition-all"
+                />
+                {(selectedChat ? searchQuery : chatSearchQuery) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (selectedChat) {
+                        setSearchQuery('');
+                      } else {
+                        setChatSearchQuery('');
+                      }
+                    }}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-0.5"
+                    aria-label="Clear search"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Authentication Modal if not logged into Telegram MTProto */}
           {!authState.isAuthenticated && (
             <AuthModal
@@ -249,8 +289,13 @@ export const App: React.FC = () => {
                   <ChatSidebar
                     chats={chats}
                     selectedChatId={selectedChat ? selectedChat.id : null}
-                    onSelectChat={handleSelectChat}
+                    onSelectChat={(chat) => {
+                      setSearchQuery('');
+                      handleSelectChat(chat);
+                    }}
                     isLoading={isLoadingChats}
+                    searchQuery={chatSearchQuery}
+                    onSearchChange={setChatSearchQuery}
                   />
                 </div>
 
@@ -266,6 +311,8 @@ export const App: React.FC = () => {
                     isLoading={isLoadingVideos}
                     onPlayVideo={(video) => setActiveVideo(video)}
                     onBack={isMobile ? () => setSelectedChat(null) : undefined}
+                    searchQuery={searchQuery}
+                    onClearSearch={() => setSearchQuery('')}
                   />
                 </div>
               </div>
