@@ -89,11 +89,11 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               type="button"
               onClick={onInstall}
-              className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 text-slate-200 hover:text-white flex items-center space-x-1.5 text-xs font-semibold transition-all shadow-sm active:scale-95 cursor-pointer"
-              title="Install TeleStream Web App"
+              className="px-2.5 sm:px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 border border-emerald-300/40 text-white flex items-center space-x-1.5 text-xs font-bold transition-all shadow-md shadow-emerald-500/25 hover:shadow-emerald-500/40 hover:scale-[1.03] active:scale-95 cursor-pointer ring-1 ring-white/20"
+              title="Install TeleStream App to your device"
             >
-              <Download className="w-3.5 h-3.5 text-telegram-blue" />
-              <span className="hidden xs:inline sm:inline">Install App</span>
+              <Download className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span className="font-semibold tracking-tight">Install App</span>
             </button>
           )}
 
