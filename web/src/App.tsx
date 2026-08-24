@@ -295,7 +295,6 @@ export const App: React.FC = () => {
                     }}
                     isLoading={isLoadingChats}
                     searchQuery={chatSearchQuery}
-                    onSearchChange={setChatSearchQuery}
                   />
                 </div>
 
