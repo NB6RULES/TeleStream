@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, LogOut, RefreshCw, ArrowLeft } from 'lucide-react';
+import { Search, LogOut, RefreshCw } from 'lucide-react';
 import { TDLibUser } from '../../types/tdlib';
 
 const GithubIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
@@ -29,25 +29,15 @@ export const Navbar: React.FC<NavbarProps> = ({
   isRefreshing = false,
 }) => {
   return (
-    <header className="sticky top-0 z-30 w-full bg-slate-900/90 backdrop-blur-xl border-b border-slate-800 px-2 sm:px-4 lg:px-6 py-2.5">
+    <header className="sticky top-0 z-30 w-full bg-slate-900/90 backdrop-blur-xl border-b border-slate-800 px-3 sm:px-4 lg:px-6 py-2.5">
       <div className="w-full flex items-center justify-between gap-3">
-        {/* Left: Back Button & Brand Logo positioned close to the edge */}
-        <div className="flex items-center space-x-2 sm:space-x-2.5 flex-shrink-0">
-          {onBackToHome && (
-            <button
-              type="button"
-              onClick={onBackToHome}
-              className="py-1.5 px-2 sm:px-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700/60 text-slate-300 hover:text-white text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer"
-              title="Return to Website"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Website</span>
-            </button>
-          )}
-
-          <div
-            className="flex items-center space-x-2.5 cursor-pointer"
+        {/* Left: Brand Logo positioned close to the edge */}
+        <div className="flex items-center space-x-2.5 flex-shrink-0">
+          <button
+            type="button"
+            className="flex items-center space-x-2.5 cursor-pointer hover:opacity-80 transition-opacity bg-transparent border-0 p-0 focus:outline-none"
             onClick={onBackToHome}
+            title="Return to Home / Landing Page"
           >
             <img
               src={`${import.meta.env.BASE_URL}AppIcon.png`}
@@ -57,7 +47,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span className="font-bold text-white tracking-tight text-base sm:text-lg leading-none">
               TeleStream
             </span>
-          </div>
+          </button>
         </div>
 
         {/* Center: Search Bar */}
