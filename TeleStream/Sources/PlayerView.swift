@@ -46,6 +46,7 @@ struct PlayerView: View {
 
     @EnvironmentObject var client: TelegramClient
     @StateObject private var viewModel = PlayerViewModel()
+    @Environment(\.scenePhase) var scenePhase
     @Environment(\.dismiss) var dismiss
 
     @State private var skipBadge: (isLeft: Bool, text: String)? = nil
@@ -242,18 +243,6 @@ struct PlayerView: View {
 
                                 HStack(spacing: 14) {
                                     Button(action: {
-                                        dismiss()
-                                    }) {
-                                        Text("Back")
-                                            .font(.system(size: 16, weight: .semibold))
-                                            .foregroundColor(.white.opacity(0.85))
-                                            .padding(.horizontal, 24)
-                                            .padding(.vertical, 12)
-                                            .background(Color.white.opacity(0.15))
-                                            .cornerRadius(24)
-                                    }
-
-                                    Button(action: {
                                         viewModel.setup(fileId: fileId, fileSize: fileSize, fileName: fileName, client: client, isMKV: isMKV)
                                     }) {
                                         HStack(spacing: 8) {
@@ -340,6 +329,18 @@ struct PlayerView: View {
         .onDisappear {
             viewModel.savePosition()
             viewModel.teardown()
+        }
+        .onChange(of: scenePhase) { newPhase in
+            if newPhase == .active {
+                // Restart server if needed (start() checks if it's already running)
+                LocalStreamServer.shared.start(with: client)
+                
+                // If it was playing or had an error, try to refresh setup
+                if viewModel.error != nil {
+                    let isM = viewModel.isMKV
+                    viewModel.setup(fileId: viewModel.currentFileId, fileSize: viewModel.currentFileSize, fileName: viewModel.currentFileName, client: client, isMKV: isM)
+                }
+            }
         }
     }
 
