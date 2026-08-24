@@ -5,6 +5,7 @@ import { VideoGrid } from './components/media/VideoGrid';
 import { CustomVideoPlayer } from './components/player/CustomVideoPlayer';
 import { AuthModal } from './components/auth/AuthModal';
 import { LandingPage } from './components/landing/LandingPage';
+import { InstallModal } from './components/common/InstallModal';
 import { TDLibChat, VideoItem } from './types/tdlib';
 import { AuthState } from './types/auth';
 import { StreamRangeRequest } from './types/stream';
@@ -12,9 +13,11 @@ import { tdlibClient } from './services/tdlib/tdlibClient';
 import { registerServiceWorker, setChunkProvider } from './services/serviceWorker/registerServiceWorker';
 import { fetchVideoChunk } from './services/streaming/streamManager';
 import { useIsMobile } from './hooks/useMediaQuery';
+import { usePWAInstall } from './hooks/usePWAInstall';
 
 export const App: React.FC = () => {
   const isMobile = useIsMobile();
+  const { isInstallable, isIOS, showIosGuide, setShowIosGuide, triggerInstall } = usePWAInstall();
   const touchStartXRef = useRef<number | null>(null);
   const touchStartYRef = useRef<number | null>(null);
 
@@ -206,6 +209,7 @@ export const App: React.FC = () => {
             onSearchChange={setSearchQuery}
             onLogout={handleLogout}
             onRefresh={handleRefresh}
+            onInstall={isInstallable ? triggerInstall : undefined}
             isRefreshing={isRefreshing}
             onBackToHome={() => navigateTo('landing', '#home')}
           />
@@ -217,6 +221,13 @@ export const App: React.FC = () => {
               onBackToHome={() => navigateTo('landing', '#home')}
             />
           )}
+
+          {/* Install PWA Modal / iOS Guide */}
+          <InstallModal
+            isOpen={showIosGuide}
+            onClose={() => setShowIosGuide(false)}
+            isIOS={isIOS}
+          />
 
           {/* Main Content Area */}
           {authState.isAuthenticated && (

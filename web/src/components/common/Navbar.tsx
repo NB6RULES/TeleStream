@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, LogOut, RefreshCw } from 'lucide-react';
+import { Search, LogOut, RefreshCw, Download } from 'lucide-react';
 import { TDLibUser } from '../../types/tdlib';
 
 const GithubIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
@@ -15,6 +15,7 @@ interface NavbarProps {
   onLogout: () => void;
   onRefresh?: () => void;
   onBackToHome?: () => void;
+  onInstall?: () => void;
   isRefreshing?: boolean;
   isServiceWorkerReady?: boolean;
 }
@@ -26,6 +27,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onLogout,
   onRefresh,
   onBackToHome,
+  onInstall,
   isRefreshing = false,
 }) => {
   return (
@@ -80,6 +82,18 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
               <span className="font-medium tracking-wide">{isRefreshing ? 'Syncing...' : 'Refresh'}</span>
+            </button>
+          )}
+
+          {onInstall && (
+            <button
+              type="button"
+              onClick={onInstall}
+              className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 text-slate-200 hover:text-white flex items-center space-x-1.5 text-xs font-semibold transition-all shadow-sm active:scale-95 cursor-pointer"
+              title="Install TeleStream Web App"
+            >
+              <Download className="w-3.5 h-3.5 text-telegram-blue" />
+              <span className="hidden xs:inline sm:inline">Install App</span>
             </button>
           )}
 
