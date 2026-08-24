@@ -70,10 +70,16 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               type="button"
               onClick={onRefresh}
-              className="p-2 rounded-xl bg-slate-800/70 hover:bg-slate-700/70 border border-slate-700/60 text-slate-300 hover:text-white transition-all cursor-pointer"
-              title="Refresh videos"
+              disabled={isRefreshing}
+              className={`px-3 py-1.5 rounded-xl border flex items-center space-x-1.5 text-xs font-semibold transition-all shadow-md active:scale-95 cursor-pointer ${
+                isRefreshing
+                  ? 'bg-sky-500/20 border-sky-400/40 text-sky-300 cursor-wait animate-pulse'
+                  : 'bg-gradient-to-r from-telegram-blue to-sky-500 hover:from-sky-400 hover:to-blue-600 border-sky-300/30 text-white shadow-telegram-blue/30 hover:shadow-telegram-blue/50 hover:shadow-lg'
+              }`}
+              title="Sync & refresh channels & videos"
             >
-              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span className="font-medium tracking-wide">{isRefreshing ? 'Syncing...' : 'Refresh'}</span>
             </button>
           )}
 
