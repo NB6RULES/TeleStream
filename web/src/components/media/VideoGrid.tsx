@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { VideoItem } from '../../types/tdlib';
 import { VideoCard } from './VideoCard';
-import { Film, ArrowUpDown } from 'lucide-react';
+import { Film, ArrowUpDown, ChevronLeft } from 'lucide-react';
 
 interface VideoGridProps {
   videos: VideoItem[];
   chatTitle: string;
   isLoading: boolean;
   onPlayVideo: (video: VideoItem) => void;
+  onBack?: () => void;
 }
 
 export const VideoGrid: React.FC<VideoGridProps> = ({
@@ -15,6 +16,7 @@ export const VideoGrid: React.FC<VideoGridProps> = ({
   chatTitle,
   isLoading,
   onPlayVideo,
+  onBack,
 }) => {
   const [sortBy, setSortBy] = useState<'recent' | 'size' | 'duration'>('recent');
 
@@ -25,19 +27,34 @@ export const VideoGrid: React.FC<VideoGridProps> = ({
   });
 
   return (
-    <div className="flex-1 flex flex-col h-[calc(100vh-65px)] overflow-y-auto bg-slate-950/40 p-4 lg:p-8">
+    <div className="w-full h-full flex flex-col overflow-y-auto bg-slate-950/40 p-4 lg:p-8">
       {/* Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-800/80 mb-6">
-        <div>
-          <div className="flex items-center space-x-2">
-            <h2 className="text-xl font-bold text-white tracking-tight">{chatTitle}</h2>
-            <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono">
-              {videos.length} Videos
-            </span>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 sm:pb-6 border-b border-slate-800/80 mb-4 sm:mb-6">
+        <div className="flex items-center space-x-3">
+          {onBack && (
+            <button
+              type="button"
+              onClick={onBack}
+              className="md:hidden p-2 -ml-1 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 active:scale-95 transition-all flex items-center justify-center cursor-pointer shadow-sm"
+              title="Back to Chats"
+              aria-label="Back to Chats"
+            >
+              <ChevronLeft className="w-5 h-5 text-telegram-blue" />
+            </button>
+          )}
+          <div className="min-w-0">
+            <div className="flex items-center space-x-2">
+              <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight truncate max-w-[200px] sm:max-w-md">
+                {chatTitle || 'Select a Chat'}
+              </h2>
+              <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono flex-shrink-0">
+                {videos.length} Videos
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 mt-0.5 truncate hidden sm:block">
+              Zero-wait virtual streaming powered by TDLib & Service Worker range requests
+            </p>
           </div>
-          <p className="text-xs text-slate-400 mt-1">
-            Zero-wait virtual streaming powered by TDLib & Service Worker range requests
-          </p>
         </div>
 
         {/* Sort Controls */}

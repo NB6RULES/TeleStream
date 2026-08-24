@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Navbar } from './components/common/Navbar';
 import { ChatSidebar } from './components/chat/ChatSidebar';
 import { VideoGrid } from './components/media/VideoGrid';
@@ -11,8 +11,13 @@ import { StreamRangeRequest } from './types/stream';
 import { tdlibClient } from './services/tdlib/tdlibClient';
 import { registerServiceWorker, setChunkProvider } from './services/serviceWorker/registerServiceWorker';
 import { fetchVideoChunk } from './services/streaming/streamManager';
+import { useIsMobile } from './hooks/useMediaQuery';
 
 export const App: React.FC = () => {
+  const isMobile = useIsMobile();
+  const touchStartXRef = useRef<number | null>(null);
+  const touchStartYRef = useRef<number | null>(null);
+
   // Navigation State: 'landing' (default) vs 'player' (streamer platform)
   const [currentView, setCurrentView] = useState<'landing' | 'player'>(() => {
     if (typeof window !== 'undefined') {
@@ -87,7 +92,7 @@ export const App: React.FC = () => {
     try {
       const chatList = await tdlibClient.getChats();
       setChats(chatList);
-      if (chatList.length > 0 && !selectedChat) {
+      if (chatList.length > 0 && !selectedChat && !isMobile) {
         setSelectedChat(chatList[0]);
       }
     } catch (e) {
@@ -95,7 +100,14 @@ export const App: React.FC = () => {
     } finally {
       setIsLoadingChats(false);
     }
-  }, [authState.isAuthenticated, selectedChat]);
+  }, [authState.isAuthenticated, selectedChat, isMobile]);
+
+  // Keep desktop with a selected chat by default if available
+  useEffect(() => {
+    if (!isMobile && !selectedChat && chats.length > 0) {
+      setSelectedChat(chats[0]);
+    }
+  }, [isMobile, selectedChat, chats]);
 
   useEffect(() => {
     if (currentView === 'player' && authState.isAuthenticated) {
@@ -148,6 +160,25 @@ export const App: React.FC = () => {
     setActiveVideo(null);
   };
 
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (!isMobile || !selectedChat) return;
+    touchStartXRef.current = e.touches[0].clientX;
+    touchStartYRef.current = e.touches[0].clientY;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartXRef.current === null || touchStartYRef.current === null) return;
+    const deltaX = e.changedTouches[0].clientX - touchStartXRef.current;
+    const deltaY = e.changedTouches[0].clientY - touchStartYRef.current;
+
+    // Swipe right to go back: horizontal distance > 60px and horizontally dominant
+    if (deltaX > 60 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
+      setSelectedChat(null);
+    }
+    touchStartXRef.current = null;
+    touchStartYRef.current = null;
+  };
+
   const filteredVideos = videos.filter((v) =>
     (v.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
     (v.fileName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -187,25 +218,47 @@ export const App: React.FC = () => {
             />
           )}
 
-          {/* Main 2-Pane Content Area */}
+          {/* Main Content Area */}
           {authState.isAuthenticated && (
-            <>
-              <main className="flex-1 flex overflow-hidden">
-                <ChatSidebar
-                  chats={chats}
-                  selectedChatId={selectedChat ? selectedChat.id : null}
-                  onSelectChat={handleSelectChat}
-                  isLoading={isLoadingChats}
-                />
+            <main className="flex-1 relative overflow-hidden w-full">
+              <div
+                className={`h-full flex transition-transform duration-300 ease-out md:transition-none md:transform-none ${
+                  isMobile
+                    ? selectedChat
+                      ? '-translate-x-1/2'
+                      : 'translate-x-0'
+                    : 'w-full'
+                }`}
+                style={{
+                  width: isMobile ? '200vw' : '100%',
+                }}
+              >
+                {/* Chat List / Sidebar */}
+                <div className={`h-full ${isMobile ? 'w-[100vw]' : 'w-72 lg:w-80'} flex-shrink-0`}>
+                  <ChatSidebar
+                    chats={chats}
+                    selectedChatId={selectedChat ? selectedChat.id : null}
+                    onSelectChat={handleSelectChat}
+                    isLoading={isLoadingChats}
+                  />
+                </div>
 
-                <VideoGrid
-                  videos={filteredVideos}
-                  chatTitle={selectedChat ? selectedChat.title : 'All Videos'}
-                  isLoading={isLoadingVideos}
-                  onPlayVideo={(video) => setActiveVideo(video)}
-                />
-              </main>
-            </>
+                {/* Video Grid View */}
+                <div
+                  className={`h-full ${isMobile ? 'w-[100vw]' : 'flex-1'} flex-shrink-0 md:flex-shrink flex flex-col`}
+                  onTouchStart={handleTouchStart}
+                  onTouchEnd={handleTouchEnd}
+                >
+                  <VideoGrid
+                    videos={filteredVideos}
+                    chatTitle={selectedChat ? selectedChat.title : (isMobile ? 'Select a Chat' : (chats[0]?.title || 'All Videos'))}
+                    isLoading={isLoadingVideos}
+                    onPlayVideo={(video) => setActiveVideo(video)}
+                    onBack={isMobile ? () => setSelectedChat(null) : undefined}
+                  />
+                </div>
+              </div>
+            </main>
           )}
 
           {/* Active Video Player Modal */}

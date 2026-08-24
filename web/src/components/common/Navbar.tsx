@@ -50,7 +50,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={onBackToHome}
           >
             <img
-              src="/AppIcon.png"
+              src={`${import.meta.env.BASE_URL}AppIcon.png`}
               alt="TeleStream Logo"
               className="w-8 h-8 rounded-xl shadow-md shadow-telegram-blue/20"
             />

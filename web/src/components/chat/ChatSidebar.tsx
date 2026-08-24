@@ -68,7 +68,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   };
 
   return (
-    <aside className="w-full md:w-72 lg:w-80 flex-shrink-0 bg-slate-900/60 border-r border-slate-800/80 flex flex-col h-[calc(100vh-65px)]">
+    <aside className="w-full h-full bg-slate-900/60 border-r border-slate-800/80 flex flex-col">
       <div className="p-4 border-b border-slate-800/80 flex items-center justify-between">
         <div className="flex items-center space-x-2">
           <Film className="w-4 h-4 text-telegram-blue" />
