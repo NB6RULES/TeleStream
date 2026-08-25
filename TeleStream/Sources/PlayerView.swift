@@ -46,7 +46,6 @@ struct PlayerView: View {
 
     @EnvironmentObject var client: TelegramClient
     @StateObject private var viewModel = PlayerViewModel()
-    @Environment(\.scenePhase) var scenePhase
     @Environment(\.dismiss) var dismiss
 
     @State private var skipBadge: (isLeft: Bool, text: String)? = nil
@@ -243,6 +242,18 @@ struct PlayerView: View {
 
                                 HStack(spacing: 14) {
                                     Button(action: {
+                                        dismiss()
+                                    }) {
+                                        Text("Back")
+                                            .font(.system(size: 16, weight: .semibold))
+                                            .foregroundColor(.white.opacity(0.85))
+                                            .padding(.horizontal, 24)
+                                            .padding(.vertical, 12)
+                                            .background(Color.white.opacity(0.15))
+                                            .cornerRadius(24)
+                                    }
+
+                                    Button(action: {
                                         viewModel.setup(fileId: fileId, fileSize: fileSize, fileName: fileName, client: client, isMKV: isMKV)
                                     }) {
                                         HStack(spacing: 8) {
@@ -329,18 +340,6 @@ struct PlayerView: View {
         .onDisappear {
             viewModel.savePosition()
             viewModel.teardown()
-        }
-        .onChange(of: scenePhase) { newPhase in
-            if newPhase == .active {
-                // Restart server if needed (start() checks if it's already running)
-                LocalStreamServer.shared.start(with: client)
-                
-                // If it was playing or had an error, try to refresh setup
-                if viewModel.error != nil {
-                    let isM = viewModel.isMKV
-                    viewModel.setup(fileId: viewModel.currentFileId, fileSize: viewModel.currentFileSize, fileName: viewModel.currentFileName, client: client, isMKV: isM)
-                }
-            }
         }
     }
 
@@ -729,10 +728,10 @@ class PlayerViewModel: ObservableObject {
     private var autoNextTimer: Timer?
     private var controlsTimer: Timer?
 
-    var currentFileId: Int = 0
-    var currentFileName: String = ""
-    var currentFileSize: Int64 = 0
-    var currentClient: TelegramClient?
+    private var currentFileId: Int = 0
+    private var currentFileName: String = ""
+    private var currentFileSize: Int64 = 0
+    private var currentClient: TelegramClient?
 
     var chatId: Int64 = 0
     var chatTitle: String = ""
@@ -1140,17 +1139,14 @@ class PlayerViewModel: ObservableObject {
 
     private func restorePosition() {
         if let saved = AppSettings.shared.playbackPositions[currentFileId], saved > 3 {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-                guard let self = self else { return }
-                if self.isMKV {
-                    self.ksPlayerView?.playerLayer?.player.seek(time: saved) { _ in }
-                } else {
-                    let time = CMTime(seconds: saved, preferredTimescale: 600)
-                    self.player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
-                }
-                self.currentPosition = saved
-                self.lastSaveTime = saved
+            if isMKV {
+                ksPlayerView?.playerLayer?.player.seek(time: saved) { _ in }
+            } else {
+                let time = CMTime(seconds: saved, preferredTimescale: 600)
+                player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
             }
+            currentPosition = saved
+            lastSaveTime = saved
         }
     }
 
@@ -1365,15 +1361,16 @@ final class CustomKSPlayerView: IOSVideoPlayerView {
         onStateChange?(state)
     }
 
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        // Hide all subviews completely to remove the KSPlayer timeline
-        self.subviews.forEach { view in
-            view.isHidden = true
-            view.alpha = 0
+    override func updateUI(isLandscape: Bool) {
+        super.updateUI(isLandscape: isLandscape)
+        toolBar.isHidden = true
+        navigationBar.isHidden = true
+        subviews.forEach { view in
+            // Hide all KSPlayer specific subviews except the playerLayer which is a CALayer
+            if view != self {
+                view.isHidden = true
+            }
         }
-        self.toolBar.isHidden = true
-        self.navigationBar.isHidden = true
     }
 }
 
@@ -1393,7 +1390,6 @@ struct KSVideoPlayerSurfaceView: UIViewRepresentable {
         let playerView = CustomKSPlayerView()
         playerView.toolBar.isHidden = true
         playerView.navigationBar.isHidden = true
-        playerView.isUserInteractionEnabled = false // Prevent KSPlayer from intercepting gestures
         playerView.backgroundColor = .black
         playerView.contentMode = (viewModel.videoGravity == .resizeAspect) ? .scaleAspectFit : .scaleAspectFill
 

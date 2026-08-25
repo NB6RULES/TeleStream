@@ -263,22 +263,8 @@ final class LocalStreamServer: @unchecked Sendable {
 
                 let available = bytesAvailable(in: file, at: currentOffset, length: bytesToRead)
                 var downloaded = available
-
-                // Check physical file if TDLib reporting is lagging or masking offset
-                let currentFile = try await tdClient.getFile(fileId: fileId)
-                let path = currentFile.local.path
-                if downloaded == 0 && !path.isEmpty, let fileHandle = FileHandle(forReadingAtPath: path) {
-                    try? fileHandle.seek(toOffset: UInt64(currentOffset))
-                    let testData = fileHandle.readData(ofLength: bytesToRead)
-                    fileHandle.closeFile()
-                    // If we read actual non-zero data, we can use it! (Sparse files might return zeros though)
-                    if testData.count > 0 && testData.contains(where: { $0 != 0 }) {
-                        downloaded = testData.count
-                    }
-                }
-
                 if downloaded == 0 {
-                    downloaded = await waitForBytes(broadcaster: broadcaster, fileId: fileId, at: currentOffset, length: bytesToRead, timeout: 5.0)
+                    downloaded = await waitForBytes(broadcaster: broadcaster, at: currentOffset, length: bytesToRead, timeout: 12.0)
                 }
 
                 if downloaded == 0 {
@@ -286,6 +272,8 @@ final class LocalStreamServer: @unchecked Sendable {
                     continue
                 }
 
+                let currentFile = try await tdClient.getFile(fileId: fileId)
+                let path = currentFile.local.path
                 guard !path.isEmpty, let fileHandle = FileHandle(forReadingAtPath: path) else {
                     try await Task.sleep(nanoseconds: 200_000_000)
                     continue
@@ -341,13 +329,12 @@ final class LocalStreamServer: @unchecked Sendable {
         return 0
     }
 
-    private func waitForBytes(broadcaster: FileUpdateBroadcaster, fileId: Int, at offset: Int64, length: Int, timeout: Double) async -> Int {
+    private func waitForBytes(broadcaster: FileUpdateBroadcaster, at offset: Int64, length: Int, timeout: Double) async -> Int {
         let stream = broadcaster.subscribe()
         let deadline = ContinuousClock.now + .seconds(timeout)
 
         for await file in stream {
             if ContinuousClock.now >= deadline { break }
-            if file.id != fileId { continue }
             let avail = bytesAvailable(in: file, at: offset, length: length)
             if avail > 0 {
                 return avail
