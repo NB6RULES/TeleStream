@@ -17,7 +17,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
   // Intercept virtual video stream requests (resilient to any subpath/prefix)
-  if (url.pathname.includes(STREAM_PREFIX) || url.hostname === 'local.stream') {
+  if (url.pathname.includes('api/stream/video') || url.hostname === 'local.stream') {
     event.respondWith(handleRangeStreamRequest(event.request, url));
   }
 });

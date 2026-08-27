@@ -56,8 +56,10 @@ export async function registerServiceWorker(onReady?: () => void): Promise<boole
   });
 
   try {
-    const basePath = (import.meta.env.BASE_URL || '/').replace(/\/+$/, '') + '/';
-    const swUrl = `${basePath}sw.js`;
+    const basePath = typeof window !== 'undefined'
+      ? new URL(import.meta.env.BASE_URL || './', window.location.href).pathname
+      : '/';
+    const swUrl = `${basePath.replace(/\/+$/, '')}/sw.js`;
 
     console.log('[SW] Registering ServiceWorker from:', swUrl, 'with scope:', basePath);
 

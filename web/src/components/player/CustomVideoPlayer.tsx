@@ -19,7 +19,10 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
   const mimeType = isMkv ? 'video/mp4' : video.mimeType || 'video/mp4';
 
   // Virtual Range Stream URL intercepted by Service Worker for pure instant streaming
-  const streamUrl = `/api/stream/video?fileId=${video.fileId}&size=${video.size}&mime=${encodeURIComponent(
+  const baseHref = typeof window !== 'undefined'
+    ? new URL(import.meta.env.BASE_URL || './', window.location.href).pathname.replace(/\/+$/, '')
+    : '';
+  const streamUrl = `${baseHref}/api/stream/video?fileId=${video.fileId}&size=${video.size}&mime=${encodeURIComponent(
     mimeType
   )}&name=${encodeURIComponent(video.fileName)}`;
 
