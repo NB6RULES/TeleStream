@@ -39,6 +39,15 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
 
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  const scheduleHideControls = useCallback(() => {
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
+    }
+    controlsTimeoutRef.current = setTimeout(() => {
+      setShowControls(false);
+    }, 3000);
+  }, []);
+
   // Video Event Handlers
   const handleTimeUpdate = () => {
     if (!videoRef.current) return;
@@ -65,6 +74,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
       playPromise
         .then(() => {
           setIsPlaying(true);
+          scheduleHideControls();
         })
         .catch((err) => {
           console.warn('[VideoPlayer] Autoplay blocked, attempting muted fallback:', err);
@@ -73,7 +83,10 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
             setIsMuted(true);
             videoRef.current
               .play()
-              .then(() => setIsPlaying(true))
+              .then(() => {
+                setIsPlaying(true);
+                scheduleHideControls();
+              })
               .catch(() => setIsPlaying(false));
           }
         });
@@ -89,12 +102,24 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
 
     video.addEventListener('loadedmetadata', handleLoadedMetadata);
     video.addEventListener('timeupdate', handleTimeUpdate);
-    video.addEventListener('playing', () => { setIsPlaying(true); setIsBuffering(false); });
-    video.addEventListener('pause', () => setIsPlaying(false));
+    video.addEventListener('playing', () => { 
+      setIsPlaying(true); 
+      setIsBuffering(false); 
+      scheduleHideControls();
+    });
+    video.addEventListener('pause', () => {
+      setIsPlaying(false);
+      setShowControls(true);
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+      }
+    });
     video.addEventListener('waiting', () => setIsBuffering(true));
     video.addEventListener('canplay', () => setIsBuffering(false));
     video.addEventListener('enterpictureinpicture', onEnterPip);
     video.addEventListener('leavepictureinpicture', onLeavePip);
+
+    scheduleHideControls();
 
     return () => {
       video.removeEventListener('loadedmetadata', handleLoadedMetadata);
@@ -105,8 +130,11 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
       video.removeEventListener('canplay', () => setIsBuffering(false));
       video.removeEventListener('enterpictureinpicture', onEnterPip);
       video.removeEventListener('leavepictureinpicture', onLeavePip);
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+      }
     };
-  }, []);
+  }, [scheduleHideControls]);
 
   const togglePlay = useCallback(() => {
     if (!videoRef.current) return;
@@ -115,6 +143,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
         .play()
         .then(() => {
           setIsPlaying(true);
+          scheduleHideControls();
         })
         .catch((err) => {
           console.warn('[VideoPlayer] Play error:', err);
@@ -122,14 +151,20 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
     } else {
       videoRef.current.pause();
       setIsPlaying(false);
+      setShowControls(true);
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+      }
     }
-  }, []);
+  }, [scheduleHideControls]);
 
   const handleSeek = (time: number) => {
     if (!videoRef.current) return;
     setIsBuffering(true);
     videoRef.current.currentTime = time;
     setCurrentTime(time);
+    setShowControls(true);
+    scheduleHideControls();
   };
 
   const handleSkip = (seconds: number) => {
@@ -137,6 +172,8 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
     const newTime = Math.max(0, Math.min(duration, videoRef.current.currentTime + seconds));
     videoRef.current.currentTime = newTime;
     setCurrentTime(newTime);
+    setShowControls(true);
+    scheduleHideControls();
   };
 
   const handleVolumeChange = (vol: number) => {
@@ -148,6 +185,8 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
       videoRef.current.muted = false;
       setIsMuted(false);
     }
+    setShowControls(true);
+    scheduleHideControls();
   };
 
   const toggleMute = () => {
@@ -155,6 +194,8 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
     const nextMute = !isMuted;
     setIsMuted(nextMute);
     videoRef.current.muted = nextMute;
+    setShowControls(true);
+    scheduleHideControls();
   };
 
   const toggleFullscreen = () => {
@@ -184,18 +225,13 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
       videoRef.current.playbackRate = rate;
     }
     setPlaybackRate(rate);
+    setShowControls(true);
+    scheduleHideControls();
   };
 
   const handleMouseMove = () => {
     setShowControls(true);
-    if (controlsTimeoutRef.current) {
-      clearTimeout(controlsTimeoutRef.current);
-    }
-    controlsTimeoutRef.current = setTimeout(() => {
-      if (isPlaying) {
-        setShowControls(false);
-      }
-    }, 3000);
+    scheduleHideControls();
   };
 
   useEffect(() => {
