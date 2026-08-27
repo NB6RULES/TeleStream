@@ -287,7 +287,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
   };
 
   // Handle clicking anywhere on the player backdrop to toggle overlay visibility
-  const handleBackdropClick = (e: React.MouseEvent) => {
+  const handleBackdropClick = () => {
     // Only toggle when clicking directly on the backdrop/video area
     if (showControls) {
       setShowControls(false);
