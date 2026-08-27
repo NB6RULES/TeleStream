@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { X, Film, Play, Pause, RotateCcw, RotateCw, Loader2 } from 'lucide-react';
+import { X, Film, Play, Loader2 } from 'lucide-react';
 import { VideoItem } from '../../types/tdlib';
 import { AspectRatio } from '../../types/stream';
 import { PlayerControls } from './PlayerControls';
@@ -19,10 +19,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
   const mimeType = isMkv ? 'video/mp4' : video.mimeType || 'video/mp4';
 
   // Virtual Range Stream URL intercepted by Service Worker for pure instant streaming
-  const baseHref = typeof window !== 'undefined'
-    ? new URL(import.meta.env.BASE_URL || './', window.location.href).pathname.replace(/\/+$/, '')
-    : '';
-  const streamUrl = `${baseHref}/api/stream/video?fileId=${video.fileId}&size=${video.size}&mime=${encodeURIComponent(
+  const streamUrl = `/api/stream/video?fileId=${video.fileId}&size=${video.size}&mime=${encodeURIComponent(
     mimeType
   )}&name=${encodeURIComponent(video.fileName)}`;
 
@@ -289,20 +286,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
     }
   };
 
-  // Handle clicking anywhere on the player backdrop to toggle overlay visibility
-  const handleBackdropClick = () => {
-    // Only toggle when clicking directly on the backdrop/video area
-    if (showControls) {
-      setShowControls(false);
-      if (controlsTimeoutRef.current) {
-        clearTimeout(controlsTimeoutRef.current);
-      }
-    } else {
-      setShowControls(true);
-      scheduleHideControls();
-    }
-  };
-
   return (
     <div
       ref={containerRef}
@@ -351,7 +334,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
       {/* Video Element Container */}
       <div
         className="relative w-full h-full flex items-center justify-center cursor-pointer"
-        onClick={handleBackdropClick}
+        onClick={togglePlay}
       >
         <video
           ref={videoRef}
@@ -381,58 +364,16 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
           </div>
         )}
 
-        {/* Center Play/Pause & Skip Controls Overlay */}
-        {!isBuffering && (
+        {/* Interactive Center Play Button on Pause */}
+        {!isPlaying && !isBuffering && (
           <div
-            className={`absolute flex items-center justify-center space-x-6 sm:space-x-10 z-20 transition-all duration-300 ${
-              showControls ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none'
-            }`}
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              togglePlay();
+            }}
+            className="absolute w-20 h-20 rounded-full bg-telegram-blue/90 hover:bg-telegram-blue hover:scale-110 active:scale-95 border border-white/30 flex items-center justify-center text-white shadow-2xl transition-all cursor-pointer"
           >
-            {/* 10s Backward */}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleSkip(-10);
-              }}
-              className="group flex flex-col items-center justify-center p-3.5 sm:p-4 rounded-full bg-black/60 hover:bg-black/80 active:scale-90 border border-white/10 text-white/90 hover:text-white shadow-xl transition-all cursor-pointer backdrop-blur-md"
-              title="Rewind 10 seconds"
-            >
-              <RotateCcw className="w-6 h-6 sm:w-8 sm:h-8 group-hover:-rotate-45 transition-transform" />
-              <span className="text-[10px] sm:text-xs font-bold font-mono text-slate-300 mt-0.5">10s</span>
-            </button>
-
-            {/* Play / Pause Toggle */}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                togglePlay();
-              }}
-              className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-telegram-blue/90 hover:bg-telegram-blue hover:scale-105 active:scale-95 border border-white/30 flex items-center justify-center text-white shadow-2xl transition-all cursor-pointer backdrop-blur-sm"
-              title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
-            >
-              {isPlaying ? (
-                <Pause className="w-8 h-8 sm:w-10 sm:h-10 text-white fill-white" />
-              ) : (
-                <Play className="w-8 h-8 sm:w-10 sm:h-10 text-white fill-white ml-1" />
-              )}
-            </button>
-
-            {/* 10s Forward */}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleSkip(10);
-              }}
-              className="group flex flex-col items-center justify-center p-3.5 sm:p-4 rounded-full bg-black/60 hover:bg-black/80 active:scale-90 border border-white/10 text-white/90 hover:text-white shadow-xl transition-all cursor-pointer backdrop-blur-md"
-              title="Fast Forward 10 seconds"
-            >
-              <RotateCw className="w-6 h-6 sm:w-8 sm:h-8 group-hover:rotate-45 transition-transform" />
-              <span className="text-[10px] sm:text-xs font-bold font-mono text-slate-300 mt-0.5">10s</span>
-            </button>
+            <Play className="w-9 h-9 text-white fill-white ml-1" />
           </div>
         )}
       </div>
