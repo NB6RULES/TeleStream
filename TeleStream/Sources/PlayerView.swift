@@ -920,10 +920,9 @@ class PlayerViewModel: ObservableObject {
             }
         }
 
-        let options = KSOptions()
-        options.isAutoPlay = true
-        options.isSeekedAutoPlay = true
-        let resource = KSPlayerResource(url: url, options: options, name: title)
+        KSOptions.isAutoPlay = true
+        KSOptions.isSeekedAutoPlay = true
+        let resource = KSPlayerResource(url: url, options: KSOptions(), name: title)
         playerView.set(resource: resource)
     }
 
