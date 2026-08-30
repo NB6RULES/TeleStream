@@ -16,6 +16,15 @@ class AppSettings: ObservableObject {
     @Published var hideClipsBelowMB: Int {
         didSet { UserDefaults.standard.set(hideClipsBelowMB, forKey: "hideClipsBelowMB") }
     }
+    @Published var chatViewLayout: String {
+        didSet { UserDefaults.standard.set(chatViewLayout, forKey: "chatViewLayout") }
+    }
+    @Published var favoriteChatIds: Set<Int64> {
+        didSet {
+            let array = Array(favoriteChatIds)
+            UserDefaults.standard.set(array, forKey: "favoriteChatIds")
+        }
+    }
 
     // Continue watching positions: [fileId: position in seconds]
     @Published var playbackPositions: [Int: Double] {
@@ -41,6 +50,15 @@ class AppSettings: ObservableObject {
         self.downloadWholeFirst = defaults.bool(forKey: "downloadWholeFirst")
         self.autoNextEpisode = defaults.object(forKey: "autoNextEpisode") as? Bool ?? true
         self.hideClipsBelowMB = defaults.object(forKey: "hideClipsBelowMB") as? Int ?? 0
+        self.chatViewLayout = defaults.string(forKey: "chatViewLayout") ?? "rows"
+
+        if let favArray = defaults.array(forKey: "favoriteChatIds") as? [Int64] {
+            self.favoriteChatIds = Set(favArray)
+        } else if let favInts = defaults.array(forKey: "favoriteChatIds") as? [Int] {
+            self.favoriteChatIds = Set(favInts.map { Int64($0) })
+        } else {
+            self.favoriteChatIds = []
+        }
 
         if let data = defaults.data(forKey: "playbackPositions"),
            let positions = try? JSONDecoder().decode([Int: Double].self, from: data) {
@@ -90,6 +108,18 @@ class AppSettings: ObservableObject {
     func clearAllPositions() {
         playbackPositions = [:]
         continueWatching = []
+    }
+
+    func toggleFavorite(chatId: Int64) {
+        if favoriteChatIds.contains(chatId) {
+            favoriteChatIds.remove(chatId)
+        } else {
+            favoriteChatIds.insert(chatId)
+        }
+    }
+
+    func isFavorite(chatId: Int64) -> Bool {
+        favoriteChatIds.contains(chatId)
     }
 }
 

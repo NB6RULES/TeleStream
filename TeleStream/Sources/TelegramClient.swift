@@ -15,6 +15,7 @@ final class TelegramClient: ObservableObject {
     @Published var passwordHint: String?
     @Published var currentUserName: String = ""
     @Published var currentUserPhone: String = ""
+    @Published var currentUserId: Int64 = 0
     @Published var isProcessingAuth: Bool = false
 
     let fileUpdateBroadcaster = FileUpdateBroadcaster()
@@ -317,11 +318,29 @@ final class TelegramClient: ObservableObject {
     func fetchCurrentUser() async {
         do {
             let me = try await client.getMe()
+            currentUserId = me.id
             currentUserName = [me.firstName, me.lastName].filter { !$0.isEmpty }.joined(separator: " ")
             currentUserPhone = me.phoneNumber.isEmpty ? "" : "+\(me.phoneNumber)"
         } catch {
             print("Failed to fetch user info: \(error)")
         }
+    }
+
+    func getSavedMessagesChat() async -> Chat? {
+        if currentUserId == 0 {
+            await fetchCurrentUser()
+        }
+        guard currentUserId != 0 else { return nil }
+
+        // Try getting chat directly for current user id
+        if let chat = try? await client.getChat(chatId: currentUserId) {
+            return chat
+        }
+        // Or create/open private chat with oneself
+        if let chat = try? await client.createPrivateChat(force: false, userId: currentUserId) {
+            return chat
+        }
+        return nil
     }
 
     // MARK: - Avatar/Photo

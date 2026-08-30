@@ -2,6 +2,17 @@ import Foundation
 import Network
 import TDLibKit
 
+@MainActor
+public final class StreamTelemetry: ObservableObject {
+    public static let shared = StreamTelemetry()
+    @Published public var speedFormatted: String = "0 KB/s"
+    @Published public var speedBytesPerSec: Double = 0
+    @Published public var activeStreamsCount: Int = 0
+    @Published public var totalBytesTransferred: Int64 = 0
+    @Published public var lastChunkSize: Int = 0
+    @Published public var isStreaming: Bool = false
+}
+
 final class LocalStreamServer: @unchecked Sendable {
     static let shared = LocalStreamServer()
 
@@ -11,8 +22,42 @@ final class LocalStreamServer: @unchecked Sendable {
     private var broadcaster: FileUpdateBroadcaster?
     private let lock = NSLock()
     private var activeConnections = [UUID: NWConnection]()
+    private var byteSamples: [(time: CFAbsoluteTime, bytes: Int)] = []
+    private let samplesLock = NSLock()
 
     private init() {}
+
+    func recordBytesTransferred(_ count: Int) {
+        samplesLock.lock()
+        let now = CFAbsoluteTimeGetCurrent()
+        byteSamples.append((time: now, bytes: count))
+        byteSamples.removeAll { now - $0.time > 2.0 }
+        let totalBytes = byteSamples.reduce(0) { $0 + $1.bytes }
+        let firstTime = byteSamples.first?.time ?? now
+        let lastTime = byteSamples.last?.time ?? now
+        let duration = max(0.5, lastTime - firstTime)
+        let bps = Double(totalBytes) / duration
+        samplesLock.unlock()
+
+        let formatted = Self.formatSpeed(bps)
+        Task { @MainActor in
+            StreamTelemetry.shared.speedBytesPerSec = bps
+            StreamTelemetry.shared.totalBytesTransferred += Int64(count)
+            StreamTelemetry.shared.lastChunkSize = count
+            StreamTelemetry.shared.isStreaming = true
+            StreamTelemetry.shared.speedFormatted = formatted
+        }
+    }
+
+    private static func formatSpeed(_ bytesPerSec: Double) -> String {
+        if bytesPerSec < 1024 {
+            return "\(Int(bytesPerSec)) B/s"
+        } else if bytesPerSec < 1024 * 1024 {
+            return String(format: "%.1f KB/s", bytesPerSec / 1024.0)
+        } else {
+            return String(format: "%.2f MB/s", bytesPerSec / (1024.0 * 1024.0))
+        }
+    }
 
     @MainActor
     func start(with client: TelegramClient) {
@@ -298,6 +343,7 @@ final class LocalStreamServer: @unchecked Sendable {
                     break
                 }
 
+                self.recordBytesTransferred(data.count)
                 currentOffset += Int64(data.count)
                 errorCount = 0
             } catch {

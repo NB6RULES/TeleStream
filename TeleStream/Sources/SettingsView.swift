@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject var client: TelegramClient
     @ObservedObject var settings = AppSettings.shared
+    @StateObject private var ipaDownloader = IPADownloader.shared
     @Environment(\.dismiss) var dismiss
     @State private var cacheSize: String = "..."
     @State private var isClearing = false
@@ -139,6 +140,140 @@ struct SettingsView: View {
                             }
                         }
 
+                        // Updates & IPA Download section
+                        settingsSection("UPDATES & INSTALLATION") {
+                            VStack(spacing: 0) {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text("Latest GitHub Release")
+                                            .font(.system(size: 17))
+                                            .foregroundColor(Color(hex: "E3E2E7"))
+                                        Text(ipaDownloader.latestRelease?.tagName ?? "Checking...")
+                                            .font(.system(size: 13))
+                                            .foregroundColor(Color(hex: "8B90A0"))
+                                    }
+                                    Spacer()
+                                    Button(action: {
+                                        Task { await ipaDownloader.checkForUpdates() }
+                                    }) {
+                                        if ipaDownloader.isChecking {
+                                            ProgressView()
+                                                .tint(Color(hex: "ADC6FF"))
+                                        } else {
+                                            Image(systemName: "arrow.clockwise")
+                                                .font(.system(size: 16))
+                                                .foregroundColor(Color(hex: "ADC6FF"))
+                                                .padding(6)
+                                        }
+                                    }
+                                }
+                                .padding(16)
+
+                                Divider().background(Color(hex: "343539")).padding(.leading, 16)
+
+                                if ipaDownloader.isDownloading {
+                                    VStack(spacing: 10) {
+                                        HStack {
+                                            Text("Downloading TeleStream.ipa")
+                                                .font(.system(size: 15, weight: .medium))
+                                                .foregroundColor(Color(hex: "E3E2E7"))
+                                            Spacer()
+                                            Text(ipaDownloader.downloadSpeed)
+                                                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                                                .foregroundColor(Color(hex: "ADC6FF"))
+                                        }
+
+                                        ProgressView(value: ipaDownloader.progress)
+                                            .tint(Color(hex: "007AFF"))
+
+                                        HStack {
+                                            Text("\(IPADownloader.formatBytes(ipaDownloader.bytesWritten)) / \(IPADownloader.formatBytes(ipaDownloader.totalBytesExpected))")
+                                                .font(.system(size: 12))
+                                                .foregroundColor(Color(hex: "8B90A0"))
+                                            Spacer()
+                                            Button("Cancel") {
+                                                ipaDownloader.cancelDownload()
+                                            }
+                                            .font(.system(size: 13, weight: .medium))
+                                            .foregroundColor(Color(hex: "FFB4AB"))
+                                        }
+                                    }
+                                    .padding(16)
+                                } else {
+                                    Button(action: {
+                                        if ipaDownloader.downloadedFileURL != nil {
+                                            ipaDownloader.showShareSheet = true
+                                        } else {
+                                            ipaDownloader.startDownload()
+                                        }
+                                    }) {
+                                        HStack(spacing: 12) {
+                                            Image(systemName: ipaDownloader.downloadedFileURL != nil ? "square.and.arrow.up.fill" : "arrow.down.circle.fill")
+                                                .font(.system(size: 20))
+                                                .foregroundColor(Color(hex: "007AFF"))
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(ipaDownloader.downloadedFileURL != nil ? "Save / Export TeleStream.ipa" : "Download Latest TeleStream.ipa")
+                                                    .font(.system(size: 16, weight: .semibold))
+                                                    .foregroundColor(Color(hex: "E3E2E7"))
+                                                Text(ipaDownloader.downloadedFileURL != nil ? "Tap to open share sheet or save to Files" : "Direct download from official repository")
+                                                    .font(.system(size: 12))
+                                                    .foregroundColor(Color(hex: "8B90A0"))
+                                            }
+                                            Spacer()
+                                            Image(systemName: "chevron.right")
+                                                .font(.system(size: 13))
+                                                .foregroundColor(Color(hex: "8B90A0"))
+                                        }
+                                        .padding(16)
+                                    }
+                                }
+
+                                if let error = ipaDownloader.errorMessage {
+                                    Divider().background(Color(hex: "343539")).padding(.leading, 16)
+                                    Text(error)
+                                        .font(.system(size: 13))
+                                        .foregroundColor(Color(hex: "FFB4AB"))
+                                        .padding(16)
+                                }
+
+                                Divider().background(Color(hex: "343539")).padding(.leading, 16)
+
+                                // Sideloading direct links
+                                HStack(spacing: 12) {
+                                    if let sideStoreUrl = URL(string: "sidestore://source?url=https://raw.githubusercontent.com/NB6RULES/TeleStream/main/sources.json") {
+                                        Link(destination: sideStoreUrl) {
+                                            HStack(spacing: 6) {
+                                                Image(systemName: "arrow.triangle.2.circlepath")
+                                                Text("SideStore")
+                                            }
+                                            .font(.system(size: 13, weight: .medium))
+                                            .foregroundColor(Color(hex: "ADC6FF"))
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.vertical, 8)
+                                            .background(Color(hex: "292A2E"))
+                                            .cornerRadius(8)
+                                        }
+                                    }
+
+                                    if let altStoreUrl = URL(string: "altstore://source?url=https://raw.githubusercontent.com/NB6RULES/TeleStream/main/sources.json") {
+                                        Link(destination: altStoreUrl) {
+                                            HStack(spacing: 6) {
+                                                Image(systemName: "shippingbox.fill")
+                                                Text("AltStore")
+                                            }
+                                            .font(.system(size: 13, weight: .medium))
+                                            .foregroundColor(Color(hex: "ADC6FF"))
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.vertical, 8)
+                                            .background(Color(hex: "292A2E"))
+                                            .cornerRadius(8)
+                                        }
+                                    }
+                                }
+                                .padding(16)
+                            }
+                        }
+
                         // About
                         VStack(spacing: 8) {
                             Image("TeleStreamLogo")
@@ -161,6 +296,11 @@ struct SettingsView: View {
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
+            .sheet(isPresented: $ipaDownloader.showShareSheet) {
+                if let fileUrl = ipaDownloader.downloadedFileURL {
+                    ShareSheet(activityItems: [fileUrl])
+                }
+            }
             .alert("Log Out", isPresented: $showLogoutConfirm) {
                 Button("Cancel", role: .cancel) {}
                 Button("Log Out", role: .destructive) {
@@ -188,6 +328,7 @@ struct SettingsView: View {
             .task {
                 let size = await client.getCacheSize()
                 cacheSize = formatBytes(size)
+                await ipaDownloader.checkForUpdates()
             }
         }
         .preferredColorScheme(.dark)

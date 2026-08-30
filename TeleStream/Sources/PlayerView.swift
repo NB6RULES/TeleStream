@@ -46,6 +46,7 @@ struct PlayerView: View {
 
     @EnvironmentObject var client: TelegramClient
     @StateObject private var viewModel = PlayerViewModel()
+    @ObservedObject private var telemetry = StreamTelemetry.shared
     @Environment(\.dismiss) var dismiss
 
     @State private var skipBadge: (isLeft: Bool, text: String)? = nil
@@ -116,20 +117,59 @@ struct PlayerView: View {
                 )
                 .ignoresSafeArea()
 
-                // 3. Unified Centered Buffering Indicator
+                // 3. Unified Centered Buffering & Speed Indicator
                 if viewModel.isLoading && viewModel.error == nil {
-                    VStack(spacing: 12) {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            .scaleEffect(1.4)
-                        Text("Buffering...")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(.white.opacity(0.85))
+                    VStack(spacing: 14) {
+                        ZStack {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: Color(hex: "007AFF")))
+                                .scaleEffect(1.6)
+                            Image(systemName: "bolt.fill")
+                                .font(.system(size: 13))
+                                .foregroundColor(Color(hex: "ADC6FF"))
+                        }
+                        .padding(.top, 4)
+
+                        VStack(spacing: 4) {
+                            Text("Buffering Stream...")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundColor(.white)
+
+                            HStack(spacing: 6) {
+                                Image(systemName: "speedometer")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(Color(hex: "ADC6FF"))
+                                Text(telemetry.speedFormatted == "0 KB/s" ? "Connecting MTProto..." : telemetry.speedFormatted)
+                                    .font(.system(size: 13, weight: .medium, design: .monospaced))
+                                    .foregroundColor(Color(hex: "ADC6FF"))
+                            }
+                        }
+
+                        // Network status pill
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(Color.green)
+                                .frame(width: 6, height: 6)
+                            Text("MTProto Live Proxy")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(Color(hex: "8B90A0"))
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(Capsule())
                     }
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 18)
-                    .background(Color.black.opacity(0.75))
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .padding(.horizontal, 28)
+                    .padding(.vertical, 20)
+                    .background(
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(Color.black.opacity(0.85))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 20)
+                                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                            )
+                    )
+                    .shadow(color: Color.black.opacity(0.5), radius: 16)
                     .transition(.opacity)
                 }
 

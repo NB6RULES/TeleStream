@@ -60,32 +60,138 @@ struct ContentView: View {
 
 struct MainTabView: View {
     @State private var selectedTab = 0
+    @ObservedObject var ipaDownloader = IPADownloader.shared
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            ChatListView()
-                .tabItem {
-                    Label("Chats", systemImage: "bubble.left.and.bubble.right.fill")
-                }
-                .tag(0)
+        ZStack(alignment: .top) {
+            TabView(selection: $selectedTab) {
+                ChatListView()
+                    .tabItem {
+                        Label("Chats", systemImage: "bubble.left.and.bubble.right.fill")
+                    }
+                    .tag(0)
 
-            HistoryView()
-                .tabItem {
-                    Label("History", systemImage: "clock.fill")
-                }
-                .tag(1)
+                HistoryView()
+                    .tabItem {
+                        Label("History", systemImage: "clock.fill")
+                    }
+                    .tag(1)
 
-            SettingsView()
-                .tabItem {
-                    Label("Settings", systemImage: "gearshape.fill")
+                SettingsView()
+                    .tabItem {
+                        Label("Settings", systemImage: "gearshape.fill")
+                    }
+                    .tag(2)
+            }
+            .accentColor(Color(hex: "007AFF"))
+            .preferredColorScheme(.dark)
+            .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("SwitchToChatsTab"))) { _ in
+                selectedTab = 0
+            }
+
+            // Gentle in-app update notification
+            if ipaDownloader.isUpdateAvailable && !ipaDownloader.isUpdateNotificationDismissed {
+                UpdateBannerView(
+                    releaseTag: ipaDownloader.latestRelease?.tagName ?? "vLatest",
+                    onUpdate: {
+                        withAnimation(.easeInOut) {
+                            selectedTab = 2
+                            ipaDownloader.dismissNotification()
+                        }
+                    },
+                    onDismiss: {
+                        ipaDownloader.dismissNotification()
+                    }
+                )
+                .padding(.top, 54)
+                .zIndex(100)
+            }
+        }
+        .task {
+            await ipaDownloader.checkForUpdates()
+        }
+    }
+}
+
+struct UpdateBannerView: View {
+    let releaseTag: String
+    let onUpdate: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [Color(hex: "007AFF"), Color(hex: "5856D6")],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 36, height: 36)
+                Image(systemName: "sparkles")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(.white)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text("Update Available")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(Color(hex: "E3E2E7"))
+                    Text(releaseTag)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(Color(hex: "007AFF"))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1.5)
+                        .background(Color(hex: "007AFF").opacity(0.18))
+                        .clipShape(Capsule())
                 }
-                .tag(2)
+
+                Text("A new version of TeleStream is available.")
+                    .font(.system(size: 12))
+                    .foregroundColor(Color(hex: "8B90A0"))
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            Button(action: onUpdate) {
+                Text("Update")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color(hex: "007AFF"))
+                    .clipShape(Capsule())
+            }
+
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(Color(hex: "8B90A0"))
+                    .padding(6)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(Circle())
+            }
         }
-        .accentColor(Color(hex: "007AFF"))
-        .preferredColorScheme(.dark)
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("SwitchToChatsTab"))) { _ in
-            selectedTab = 0
-        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color(hex: "17181C").opacity(0.96))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color(hex: "007AFF").opacity(0.3), lineWidth: 1)
+                )
+        )
+        .shadow(color: Color.black.opacity(0.4), radius: 12, y: 4)
+        .padding(.horizontal, 16)
+        .transition(.asymmetric(
+            insertion: .move(edge: .top).combined(with: .opacity),
+            removal: .move(edge: .top).combined(with: .opacity)
+        ))
     }
 }
 
