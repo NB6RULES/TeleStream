@@ -3,6 +3,7 @@ import TDLibKit
 
 struct ChatDetailView: View {
     @EnvironmentObject var client: TelegramClient
+    @ObservedObject var settings = AppSettings.shared
     let chatId: Int64
     let title: String
 
@@ -79,35 +80,62 @@ struct ChatDetailView: View {
                         Spacer()
                     } else {
                         ScrollView {
-                            LazyVStack(spacing: 12) {
-                                ForEach(filteredVideos, id: \.id) { message in
-                                    if let info = extractVideoInfo(from: message) {
-                                        Button(action: {
-                                            selectedPlayerItem = ActivePlayerItem(
-                                                fileId: info.fileId,
-                                                fileSize: info.fileSize,
-                                                fileName: info.fileName,
-                                                chatId: chatId,
-                                                chatTitle: title,
-                                                duration: info.duration,
-                                                thumbnailFileId: info.thumbnailFile?.id,
-                                                allVideos: allVideosList
-                                            )
-                                        }) {
-                                            if let video = info.video {
-                                                VideoCard(video: video, caption: info.caption, timestamp: message.date)
-                                            } else {
-                                                DocumentVideoCard(fileName: info.fileName, fileSize: info.fileSize, caption: info.caption, timestamp: message.date, fileId: info.fileId, duration: info.duration, thumbnailFile: info.thumbnailFile)
+                            if settings.videoViewLayout == "tiles" {
+                                LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                                    ForEach(filteredVideos, id: \.id) { message in
+                                        if let info = extractVideoInfo(from: message) {
+                                            Button(action: {
+                                                selectedPlayerItem = ActivePlayerItem(
+                                                    fileId: info.fileId,
+                                                    fileSize: info.fileSize,
+                                                    fileName: info.fileName,
+                                                    chatId: chatId,
+                                                    chatTitle: title,
+                                                    duration: info.duration,
+                                                    thumbnailFileId: info.thumbnailFile?.id,
+                                                    allVideos: allVideosList
+                                                )
+                                            }) {
+                                                VideoTileCard(info: info, timestamp: message.date)
                                             }
+                                            .buttonStyle(CardPressButtonStyle())
                                         }
-                                        .buttonStyle(CardPressButtonStyle())
-                                        .contentShape(Rectangle())
                                     }
                                 }
+                                .padding(.horizontal, 16)
+                                .padding(.top, 8)
+                                .padding(.bottom, 80)
+                            } else {
+                                LazyVStack(spacing: 12) {
+                                    ForEach(filteredVideos, id: \.id) { message in
+                                        if let info = extractVideoInfo(from: message) {
+                                            Button(action: {
+                                                selectedPlayerItem = ActivePlayerItem(
+                                                    fileId: info.fileId,
+                                                    fileSize: info.fileSize,
+                                                    fileName: info.fileName,
+                                                    chatId: chatId,
+                                                    chatTitle: title,
+                                                    duration: info.duration,
+                                                    thumbnailFileId: info.thumbnailFile?.id,
+                                                    allVideos: allVideosList
+                                                )
+                                            }) {
+                                                if let video = info.video {
+                                                    VideoCard(video: video, caption: info.caption, timestamp: message.date)
+                                                } else {
+                                                    DocumentVideoCard(fileName: info.fileName, fileSize: info.fileSize, caption: info.caption, timestamp: message.date, fileId: info.fileId, duration: info.duration, thumbnailFile: info.thumbnailFile)
+                                                }
+                                            }
+                                            .buttonStyle(CardPressButtonStyle())
+                                            .contentShape(Rectangle())
+                                        }
+                                    }
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.top, 8)
+                                .padding(.bottom, 80)
                             }
-                            .padding(.horizontal, 16)
-                            .padding(.top, 8)
-                            .padding(.bottom, 80)
                         }
                     }
                 }
@@ -115,6 +143,22 @@ struct ChatDetailView: View {
         }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        settings.videoViewLayout = (settings.videoViewLayout == "rows") ? "tiles" : "rows"
+                    }
+                }) {
+                    Image(systemName: settings.videoViewLayout == "rows" ? "square.grid.2x2" : "list.bullet")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(Color(hex: "E3E2E7"))
+                        .frame(width: 32, height: 32)
+                        .background(Color(hex: "1E1F23"))
+                        .clipShape(Circle())
+                }
+            }
+        }
         .preferredColorScheme(.dark)
         .fullScreenCover(item: $selectedPlayerItem) { item in
             PlayerView(
@@ -136,7 +180,7 @@ struct ChatDetailView: View {
         }
     }
 
-    private struct VideoInfo {
+    struct VideoInfo {
         let fileId: Int
         let fileSize: Int64
         let fileName: String
@@ -554,5 +598,134 @@ struct DocumentVideoCard: View {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMM d, yyyy 'at' h:mm a"
         return formatter.string(from: date)
+    }
+}
+
+struct VideoTileCard: View {
+    let info: ChatDetailView.VideoInfo
+    let timestamp: Int
+
+    private var episodeInfo: EpisodeInfo? {
+        EpisodeDetector.detect(from: info.fileName)
+    }
+
+    @MainActor private var watchProgress: Double? {
+        guard let current = AppSettings.shared.playbackPositions[info.fileId], info.duration > 0 else { return nil }
+        return min(max(current / Double(info.duration), 0), 1)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ZStack(alignment: .bottomTrailing) {
+                RemoteThumbnailView(thumbnailFile: info.thumbnailFile)
+                    .aspectRatio(16/9, contentMode: .fill)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 105)
+                    .clipped()
+                    .cornerRadius(10)
+
+                LinearGradient(
+                    colors: [Color.black.opacity(0.05), Color.black.opacity(0.7)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .cornerRadius(10)
+
+                // Play icon center overlay
+                Image(systemName: "play.circle.fill")
+                    .font(.system(size: 28))
+                    .foregroundColor(.white.opacity(0.85))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .shadow(color: .black.opacity(0.6), radius: 4)
+
+                // Top badges (Episode or Resolution)
+                VStack {
+                    HStack {
+                        if let ep = episodeInfo {
+                            Text(ep.displayName)
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 2)
+                                .background(Color(hex: "007AFF").opacity(0.8))
+                                .clipShape(Capsule())
+                        }
+                        Spacer()
+                    }
+                    Spacer()
+                    // Duration & Progress bar
+                    HStack {
+                        if let progress = watchProgress, progress > 0.01 && progress < 0.99 {
+                            Capsule()
+                                .fill(Color(hex: "007AFF"))
+                                .frame(height: 2.5)
+                        }
+                        Spacer()
+                        if info.duration > 0 {
+                            Text(formatDuration(info.duration))
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.black.opacity(0.7))
+                                .clipShape(Capsule())
+                        }
+                    }
+                }
+                .padding(6)
+            }
+            .allowsHitTesting(false)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(info.fileName.isEmpty ? "Video" : info.fileName)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(Color(hex: "E3E2E7"))
+                    .lineLimit(2)
+                    .frame(height: 34, alignment: .topLeading)
+
+                HStack {
+                    Text(formatBytes(info.fileSize))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(Color(hex: "8B90A0"))
+
+                    Spacer()
+
+                    let ext = (info.fileName as NSString).pathExtension.uppercased()
+                    if !ext.isEmpty {
+                        Text(ext)
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(Color(hex: "ADC6FF"))
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1.5)
+                            .background(Color(hex: "292A2E"))
+                            .cornerRadius(4)
+                    }
+                }
+            }
+            .padding(.horizontal, 2)
+        }
+        .padding(8)
+        .background(Color(hex: "17181C"))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color(hex: "2E2F35"), lineWidth: 1)
+        )
+    }
+
+    private func formatDuration(_ seconds: Int) -> String {
+        let h = seconds / 3600
+        let m = (seconds % 3600) / 60
+        let s = seconds % 60
+        if h > 0 {
+            return String(format: "%d:%02d:%02d", h, m, s)
+        }
+        return String(format: "%d:%02d", m, s)
+    }
+
+    private func formatBytes(_ bytes: Int64) -> String {
+        let mb = Double(bytes) / (1024 * 1024)
+        if mb >= 1024 { return String(format: "%.1f GB", mb / 1024) }
+        return String(format: "%.1f MB", mb)
     }
 }

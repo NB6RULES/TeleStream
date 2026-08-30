@@ -288,6 +288,29 @@ struct SettingsView: View {
                             Text("Version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.08")")
                                 .font(.system(size: 13))
                                 .foregroundColor(Color(hex: "8B90A0"))
+
+                            if let websiteUrl = URL(string: "https://nb6rules.github.io/TeleStream/") {
+                                Link(destination: websiteUrl) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "globe")
+                                            .font(.system(size: 13, weight: .semibold))
+                                        Text("Visit Official Website")
+                                            .font(.system(size: 13, weight: .semibold))
+                                        Image(systemName: "arrow.up.right")
+                                            .font(.system(size: 10, weight: .bold))
+                                    }
+                                    .foregroundColor(Color(hex: "ADC6FF"))
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 7)
+                                    .background(Color(hex: "1E1F23"))
+                                    .clipShape(Capsule())
+                                    .overlay(
+                                        Capsule()
+                                            .stroke(Color(hex: "ADC6FF").opacity(0.3), lineWidth: 1)
+                                    )
+                                }
+                                .padding(.top, 4)
+                            }
                         }
                         .padding(.top, 16)
                     }

@@ -19,6 +19,9 @@ class AppSettings: ObservableObject {
     @Published var chatViewLayout: String {
         didSet { UserDefaults.standard.set(chatViewLayout, forKey: "chatViewLayout") }
     }
+    @Published var videoViewLayout: String {
+        didSet { UserDefaults.standard.set(videoViewLayout, forKey: "videoViewLayout") }
+    }
     @Published var favoriteChatIds: Set<Int64> {
         didSet {
             let array = Array(favoriteChatIds)
@@ -51,6 +54,7 @@ class AppSettings: ObservableObject {
         self.autoNextEpisode = defaults.object(forKey: "autoNextEpisode") as? Bool ?? true
         self.hideClipsBelowMB = defaults.object(forKey: "hideClipsBelowMB") as? Int ?? 0
         self.chatViewLayout = defaults.string(forKey: "chatViewLayout") ?? "rows"
+        self.videoViewLayout = defaults.string(forKey: "videoViewLayout") ?? "rows"
 
         if let favArray = defaults.array(forKey: "favoriteChatIds") as? [Int64] {
             self.favoriteChatIds = Set(favArray)

@@ -170,61 +170,61 @@ struct ChatListView: View {
                         }
                         Spacer()
                     } else {
-                        ScrollView {
-                            LazyVStack(spacing: 0) {
-                                if searchText.isEmpty && selectedFilter == .all {
-                                    ContinueWatchingRow()
-                                        .padding(.bottom, 8)
-                                }
+                        List {
+                            if searchText.isEmpty && selectedFilter == .all {
+                                ContinueWatchingRow()
+                                    .listRowInsets(EdgeInsets())
+                                    .listRowBackground(Color.clear)
+                                    .listRowSeparator(.hidden)
+                                    .padding(.bottom, 8)
+                            }
 
-                                if settings.chatViewLayout == "tiles" {
-                                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
-                                        ForEach(filteredChats, id: \.id) { chat in
-                                            NavigationLink(destination: ChatDetailView(chatId: chat.id, title: chat.title)) {
-                                                ChatTile(chat: chat)
-                                            }
-                                            .buttonStyle(PlainButtonStyle())
-                                            .contextMenu {
-                                                Button(action: { settings.toggleFavorite(chatId: chat.id) }) {
-                                                    Label(
-                                                        settings.isFavorite(chatId: chat.id) ? "Remove from Favourites" : "Add to Favourites",
-                                                        systemImage: settings.isFavorite(chatId: chat.id) ? "star.slash" : "star.fill"
-                                                    )
-                                                }
-                                            }
-                                        }
+                            ForEach(filteredChats, id: \.id) { chat in
+                                ZStack {
+                                    NavigationLink(destination: ChatDetailView(chatId: chat.id, title: chat.title)) {
+                                        EmptyView()
                                     }
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 8)
-                                } else {
-                                    ForEach(filteredChats, id: \.id) { chat in
-                                        NavigationLink(destination: ChatDetailView(chatId: chat.id, title: chat.title)) {
-                                            ChatRow(chat: chat)
-                                        }
-                                        .buttonStyle(PlainButtonStyle())
-                                        .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                                            Button {
-                                                settings.toggleFavorite(chatId: chat.id)
-                                            } label: {
-                                                Label(
-                                                    settings.isFavorite(chatId: chat.id) ? "Unfavourite" : "Favourite",
-                                                    systemImage: settings.isFavorite(chatId: chat.id) ? "star.slash.fill" : "star.fill"
-                                                )
-                                            }
-                                            .tint(.yellow)
-                                        }
-                                        .contextMenu {
-                                            Button(action: { settings.toggleFavorite(chatId: chat.id) }) {
-                                                Label(
-                                                    settings.isFavorite(chatId: chat.id) ? "Remove from Favourites" : "Add to Favourites",
-                                                    systemImage: settings.isFavorite(chatId: chat.id) ? "star.slash" : "star.fill"
-                                                )
-                                            }
-                                        }
+                                    .opacity(0)
+
+                                    ChatRow(chat: chat)
+                                }
+                                .listRowInsets(EdgeInsets())
+                                .listRowBackground(Color.clear)
+                                .listRowSeparator(.hidden)
+                                .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                                    Button {
+                                        settings.toggleFavorite(chatId: chat.id)
+                                    } label: {
+                                        Label(
+                                            settings.isFavorite(chatId: chat.id) ? "Unfavourite" : "Favourite",
+                                            systemImage: settings.isFavorite(chatId: chat.id) ? "star.slash.fill" : "star.fill"
+                                        )
+                                    }
+                                    .tint(.yellow)
+                                }
+                                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                    Button {
+                                        settings.toggleFavorite(chatId: chat.id)
+                                    } label: {
+                                        Label(
+                                            settings.isFavorite(chatId: chat.id) ? "Unfavourite" : "Favourite",
+                                            systemImage: settings.isFavorite(chatId: chat.id) ? "star.slash.fill" : "star.fill"
+                                        )
+                                    }
+                                    .tint(.yellow)
+                                }
+                                .contextMenu {
+                                    Button(action: { settings.toggleFavorite(chatId: chat.id) }) {
+                                        Label(
+                                            settings.isFavorite(chatId: chat.id) ? "Remove from Favourites" : "Add to Favourites",
+                                            systemImage: settings.isFavorite(chatId: chat.id) ? "star.slash" : "star.fill"
+                                        )
                                     }
                                 }
                             }
                         }
+                        .listStyle(.plain)
+                        .scrollContentBackground(.hidden)
                     }
                 }
             }
@@ -243,30 +243,14 @@ struct ChatListView: View {
                     }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    HStack(spacing: 8) {
-                        // Direct Layout Toggle (Rows <-> Tiles)
-                        Button(action: {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                settings.chatViewLayout = (settings.chatViewLayout == "rows") ? "tiles" : "rows"
-                            }
-                        }) {
-                            Image(systemName: settings.chatViewLayout == "rows" ? "square.grid.2x2" : "list.bullet")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundColor(Color(hex: "E3E2E7"))
-                                .frame(width: 32, height: 32)
-                                .background(Color(hex: "1E1F23"))
-                                .clipShape(Circle())
-                        }
-
-                        // Prominent Refresh button
-                        Button(action: { Task { await refreshChats() } }) {
-                            Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundColor(Color(hex: "E3E2E7"))
-                                .frame(width: 32, height: 32)
-                                .background(Color(hex: "1E1F23"))
-                                .clipShape(Circle())
-                        }
+                    // Refresh button only on main page
+                    Button(action: { Task { await refreshChats() } }) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(Color(hex: "E3E2E7"))
+                            .frame(width: 32, height: 32)
+                            .background(Color(hex: "1E1F23"))
+                            .clipShape(Circle())
                     }
                 }
             }
@@ -556,123 +540,6 @@ struct ChatRow: View {
             let formatter = DateFormatter()
             formatter.dateFormat = "EEE"
             return formatter.string(from: date)
-        }
-    }
-}
-
-// MARK: - Chat Tile (Grid / Card Style)
-
-struct ChatTile: View {
-    let chat: Chat
-    @EnvironmentObject var client: TelegramClient
-    @ObservedObject var settings = AppSettings.shared
-    @State private var avatarPath: String?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ZStack(alignment: .topTrailing) {
-                // Large Avatar or Background Icon
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(hex: "1E1F23"))
-                        .frame(height: 100)
-
-                    if let path = avatarPath, let uiImage = UIImage(contentsOfFile: path) {
-                        Image(uiImage: uiImage)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 100)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                    } else {
-                        Image(systemName: chatIcon)
-                            .font(.system(size: 36))
-                            .foregroundColor(Color(hex: "ADC6FF"))
-                    }
-                }
-                .frame(maxWidth: .infinity)
-                .frame(height: 100)
-
-                // Top badges (Star & Unread)
-                HStack {
-                    if settings.isFavorite(chatId: chat.id) {
-                        Image(systemName: "star.fill")
-                            .font(.system(size: 11))
-                            .foregroundColor(.yellow)
-                            .padding(5)
-                            .background(Color.black.opacity(0.65))
-                            .clipShape(Circle())
-                    }
-                    Spacer()
-                    if chat.unreadCount > 0 {
-                        Text("\(chat.unreadCount)")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundColor(.black)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color(hex: "25D366"))
-                            .clipShape(Capsule())
-                    }
-                }
-                .padding(6)
-            }
-
-            // Info
-            VStack(alignment: .leading, spacing: 3) {
-                Text(chat.title)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(Color(hex: "E3E2E7"))
-                    .lineLimit(1)
-
-                if let msg = chat.lastMessage, let preview = messagePreview(msg) {
-                    Text(preview)
-                        .font(.system(size: 12))
-                        .foregroundColor(Color(hex: "8B90A0"))
-                        .lineLimit(1)
-                } else {
-                    Text("No messages")
-                        .font(.system(size: 12))
-                        .foregroundColor(Color(hex: "8B90A0"))
-                }
-            }
-            .padding(.horizontal, 4)
-            .padding(.bottom, 4)
-        }
-        .padding(8)
-        .background(Color(hex: "17181C"))
-        .cornerRadius(14)
-        .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(Color(hex: "292A2E"), lineWidth: 0.8)
-        )
-        .task {
-            if let photo = chat.photo {
-                let file = photo.small
-                if file.local.isDownloadingCompleted {
-                    avatarPath = file.local.path
-                } else {
-                    avatarPath = await client.downloadPhoto(fileId: file.id)
-                }
-            }
-        }
-    }
-
-    private var chatIcon: String {
-        switch chat.type {
-        case .chatTypePrivate: return "person.fill"
-        case .chatTypeBasicGroup: return "person.2.fill"
-        case .chatTypeSupergroup(let info): return info.isChannel ? "megaphone.fill" : "person.3.fill"
-        case .chatTypeSecret: return "lock.fill"
-        }
-    }
-
-    private func messagePreview(_ message: Message) -> String? {
-        switch message.content {
-        case .messageVideo(let v): return "🎬 \(v.caption.text.isEmpty ? v.video.fileName : v.caption.text)"
-        case .messageText(let t): return t.text.text
-        case .messagePhoto: return "📷 Photo"
-        case .messageDocument(let d): return "📄 \(d.document.fileName)"
-        default: return nil
         }
     }
 }
