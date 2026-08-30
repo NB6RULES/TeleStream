@@ -17,7 +17,6 @@ struct ChatListView: View {
     @ObservedObject var settings = AppSettings.shared
     @State private var chats: [Chat] = []
     @State private var isLoading = true
-    @State private var showSettings = false
     @State private var searchText = ""
     @State private var selectedFilter: ChatFilter = .all
 
@@ -244,6 +243,20 @@ struct ChatListView: View {
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     HStack(spacing: 8) {
+                        // Direct Layout Toggle (Rows <-> Tiles)
+                        Button(action: {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                settings.chatViewLayout = (settings.chatViewLayout == "rows") ? "tiles" : "rows"
+                            }
+                        }) {
+                            Image(systemName: settings.chatViewLayout == "rows" ? "square.grid.2x2" : "list.bullet")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundColor(Color(hex: "E3E2E7"))
+                                .frame(width: 32, height: 32)
+                                .background(Color(hex: "1E1F23"))
+                                .clipShape(Circle())
+                        }
+
                         // Prominent Refresh button
                         Button(action: { Task { await refreshChats() } }) {
                             Image(systemName: "arrow.clockwise")
@@ -253,46 +266,8 @@ struct ChatListView: View {
                                 .background(Color(hex: "1E1F23"))
                                 .clipShape(Circle())
                         }
-
-                        // 3-dots / View style & options menu
-                        Menu {
-                            Section(header: Text("Layout Style")) {
-                                Button(action: { settings.chatViewLayout = "rows" }) {
-                                    HStack {
-                                        Text("Rows View")
-                                        if settings.chatViewLayout == "rows" {
-                                            Image(systemName: "checkmark")
-                                        }
-                                    }
-                                }
-                                Button(action: { settings.chatViewLayout = "tiles" }) {
-                                    HStack {
-                                        Text("Tiles View")
-                                        if settings.chatViewLayout == "tiles" {
-                                            Image(systemName: "checkmark")
-                                        }
-                                    }
-                                }
-                            }
-
-                            Section {
-                                Button(action: { showSettings = true }) {
-                                    Label("Settings", systemImage: "gearshape")
-                                }
-                            }
-                        } label: {
-                            Image(systemName: "ellipsis")
-                                .font(.system(size: 15, weight: .bold))
-                                .foregroundColor(Color(hex: "E3E2E7"))
-                                .frame(width: 32, height: 32)
-                                .background(Color(hex: "1E1F23"))
-                                .clipShape(Circle())
-                        }
                     }
                 }
-            }
-            .sheet(isPresented: $showSettings) {
-                SettingsView()
             }
             .task {
                 await refreshChats()
