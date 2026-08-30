@@ -342,7 +342,7 @@ struct PlayerView: View {
 
                 // 6. Custom Player Controls Overlay (For BOTH MKV and MP4/MOV)
                 if viewModel.showControls && viewModel.error == nil {
-                    playerControlsOverlay
+                    playerControlsOverlay(screenWidth: geometry.size.width)
                         .transition(.opacity)
                 }
 
@@ -433,7 +433,7 @@ struct PlayerView: View {
         }
     }
 
-    private var playerControlsOverlay: some View {
+    private func playerControlsOverlay(screenWidth: CGFloat) -> some View {
         ZStack {
             // Gradient scrims
             VStack {
@@ -567,7 +567,7 @@ struct PlayerView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 52)
 
-                // Centered, tight Speed Selector Overlay (No extra space, no vertical scrolling)
+                // Centered Speed Selector Overlay (bounded strictly to screen width without overflow or vertical scrolling)
                 if showSpeedSelector {
                     HStack {
                         Spacer()
@@ -575,42 +575,53 @@ struct PlayerView: View {
                             Image(systemName: "speedometer")
                                 .font(.system(size: 13, weight: .semibold))
                                 .foregroundColor(Color(hex: "ADC6FF"))
-                                .padding(.leading, 10)
+                                .padding(.leading, 12)
 
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 6) {
-                                    ForEach(viewModel.availableRates, id: \.self) { rate in
-                                        Button(action: {
-                                            withAnimation(.easeInOut(duration: 0.15)) {
-                                                viewModel.setPlaybackRate(rate)
-                                            }
-                                            viewModel.resetControlsTimer()
-                                        }) {
-                                            HStack(spacing: 3) {
-                                                if abs(viewModel.playbackRate - rate) < 0.01 {
-                                                    Image(systemName: "checkmark")
-                                                        .font(.system(size: 9, weight: .bold))
+                            ScrollViewReader { proxy in
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 6) {
+                                        ForEach(viewModel.availableRates, id: \.self) { rate in
+                                            Button(action: {
+                                                withAnimation(.easeInOut(duration: 0.15)) {
+                                                    viewModel.setPlaybackRate(rate)
                                                 }
-                                                Text(formatRate(rate))
-                                                    .font(.system(size: 12, weight: .bold))
+                                                viewModel.resetControlsTimer()
+                                            }) {
+                                                HStack(spacing: 3) {
+                                                    if abs(viewModel.playbackRate - rate) < 0.01 {
+                                                        Image(systemName: "checkmark")
+                                                            .font(.system(size: 9, weight: .bold))
+                                                    }
+                                                    Text(formatRate(rate))
+                                                        .font(.system(size: 12, weight: .bold))
+                                                }
+                                                .foregroundColor(abs(viewModel.playbackRate - rate) < 0.01 ? .white : Color(hex: "E3E2E7"))
+                                                .padding(.horizontal, 10)
+                                                .padding(.vertical, 6)
+                                                .background(
+                                                    abs(viewModel.playbackRate - rate) < 0.01 ?
+                                                    Color(hex: "007AFF") :
+                                                    Color.white.opacity(0.12)
+                                                )
+                                                .clipShape(Capsule())
                                             }
-                                            .foregroundColor(abs(viewModel.playbackRate - rate) < 0.01 ? .white : Color(hex: "E3E2E7"))
-                                            .padding(.horizontal, 10)
-                                            .padding(.vertical, 6)
-                                            .background(
-                                                abs(viewModel.playbackRate - rate) < 0.01 ?
-                                                Color(hex: "007AFF") :
-                                                Color.white.opacity(0.12)
-                                            )
-                                            .clipShape(Capsule())
+                                            .id(rate)
                                         }
                                     }
+                                    .padding(.horizontal, 4)
+                                    .frame(height: 34)
                                 }
-                                .padding(.vertical, 4)
-                                .padding(.horizontal, 2)
+                                .frame(height: 34)
+                                .clipped()
+                                .onAppear {
+                                    proxy.scrollTo(viewModel.playbackRate, anchor: .center)
+                                }
+                                .onChange(of: viewModel.playbackRate) { newRate in
+                                    withAnimation {
+                                        proxy.scrollTo(newRate, anchor: .center)
+                                    }
+                                }
                             }
-                            .frame(height: 38)
-                            .fixedSize(horizontal: false, vertical: true)
 
                             Button(action: {
                                 withAnimation(.easeInOut(duration: 0.2)) {
@@ -618,23 +629,23 @@ struct PlayerView: View {
                                 }
                             }) {
                                 Image(systemName: "xmark.circle.fill")
-                                    .font(.system(size: 17))
+                                    .font(.system(size: 18))
                                     .foregroundColor(Color(hex: "8B90A0"))
-                                    .padding(.trailing, 8)
+                                    .padding(.trailing, 10)
                             }
                         }
-                        .padding(.horizontal, 4)
                         .padding(.vertical, 4)
+                        .frame(height: 44)
+                        .frame(maxWidth: min(screenWidth - 32, 540))
                         .background(
                             Capsule()
-                                .fill(Color.black.opacity(0.88))
+                                .fill(Color.black.opacity(0.92))
                                 .overlay(
                                     Capsule()
-                                        .stroke(Color.white.opacity(0.18), lineWidth: 1)
+                                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
                                 )
                         )
                         .shadow(color: Color.black.opacity(0.6), radius: 10)
-                        .fixedSize(horizontal: true, vertical: true)
                         Spacer()
                     }
                     .padding(.horizontal, 16)
