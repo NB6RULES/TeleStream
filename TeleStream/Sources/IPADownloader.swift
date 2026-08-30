@@ -30,6 +30,16 @@ struct GitHubAsset: Codable {
     }
 }
 
+struct GitHubPagesInfo: Codable {
+    let htmlUrl: String?
+    let status: String?
+
+    enum CodingKeys: String, CodingKey {
+        case htmlUrl = "html_url"
+        case status
+    }
+}
+
 @MainActor
 final class IPADownloader: NSObject, ObservableObject, URLSessionDownloadDelegate {
     static let shared = IPADownloader()
@@ -47,6 +57,7 @@ final class IPADownloader: NSObject, ObservableObject, URLSessionDownloadDelegat
     @Published var showShareSheet = false
     @Published var isUpdateAvailable = false
     @Published var isUpdateNotificationDismissed = false
+    @Published var websiteURL: URL = URL(string: "https://nb6rules.github.io/TeleStream/")!
 
     var currentVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
@@ -90,6 +101,30 @@ final class IPADownloader: NSObject, ObservableObject, URLSessionDownloadDelegat
         super.init()
         let config = URLSessionConfiguration.default
         self.session = URLSession(configuration: config, delegate: self, delegateQueue: .main)
+        if let cached = UserDefaults.standard.string(forKey: "cachedWebsiteURL"), let cachedURL = URL(string: cached) {
+            self.websiteURL = cachedURL
+        }
+    }
+
+    func fetchWebsiteURL() async {
+        guard let url = URL(string: "https://api.github.com/repos/NB6RULES/TeleStream/pages") else { return }
+        var request = URLRequest(url: url)
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("TeleStream-iOS-App", forHTTPHeaderField: "User-Agent")
+        request.timeoutInterval = 8
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            if let httpRes = response as? HTTPURLResponse, httpRes.statusCode == 200 {
+                let pagesInfo = try JSONDecoder().decode(GitHubPagesInfo.self, from: data)
+                if let htmlUrl = pagesInfo.htmlUrl, let liveURL = URL(string: htmlUrl) {
+                    self.websiteURL = liveURL
+                    UserDefaults.standard.set(htmlUrl, forKey: "cachedWebsiteURL")
+                }
+            }
+        } catch {
+            print("Failed to fetch live pages URL: \(error)")
+        }
     }
 
     func checkForUpdates() async {
@@ -97,6 +132,12 @@ final class IPADownloader: NSObject, ObservableObject, URLSessionDownloadDelegat
         errorMessage = nil
         defer { isChecking = false }
 
+        async let releaseFetch: () = fetchReleaseInfo()
+        async let pagesFetch: () = fetchWebsiteURL()
+        _ = await (releaseFetch, pagesFetch)
+    }
+
+    private func fetchReleaseInfo() async {
         guard let url = URL(string: "https://api.github.com/repos/NB6RULES/TeleStream/releases/latest") else {
             return
         }
