@@ -5,7 +5,10 @@ class AppSettings: ObservableObject {
     static let shared = AppSettings()
 
     @Published var maxCachedVideos: Int {
-        didSet { UserDefaults.standard.set(maxCachedVideos, forKey: "maxCachedVideos") }
+        didSet {
+            UserDefaults.standard.set(maxCachedVideos, forKey: "maxCachedVideos")
+            TelegramClient.shared.enforceCacheLimit()
+        }
     }
     @Published var downloadWholeFirst: Bool {
         didSet { UserDefaults.standard.set(downloadWholeFirst, forKey: "downloadWholeFirst") }
@@ -102,11 +105,17 @@ class AppSettings: ObservableObject {
         if continueWatching.count > 100 {
             continueWatching = Array(continueWatching.prefix(100))
         }
+
+        // Enforce LRU cache retention (protect top N, evict N+1)
+        TelegramClient.shared.enforceCacheLimit()
     }
 
     func clearPosition(fileId: Int) {
         playbackPositions.removeValue(forKey: fileId)
         continueWatching.removeAll { $0.fileId == fileId }
+        Task {
+            await TelegramClient.shared.deleteCachedFile(fileId: fileId)
+        }
     }
 
     func clearAllPositions() {

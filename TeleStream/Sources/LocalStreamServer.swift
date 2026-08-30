@@ -284,6 +284,24 @@ final class LocalStreamServer: @unchecked Sendable {
             return
         }
 
+        // Kick off continuous full-movie background download so the entire video is cached and preserved on disk
+        Task {
+            do {
+                let file = try await tdClient.getFile(fileId: fileId)
+                if !file.local.isDownloadingCompleted && !file.local.isDownloadingActive {
+                    _ = try await tdClient.downloadFile(
+                        fileId: fileId,
+                        limit: 0,
+                        offset: 0,
+                        priority: 16,
+                        synchronous: false
+                    )
+                }
+            } catch {
+                print("[LocalStreamServer] Background download start failed: \(error)")
+            }
+        }
+
         var currentOffset = startOffset
         let chunkSize: Int64 = 1024 * 1024 // 1MB chunks
         var errorCount = 0
@@ -297,19 +315,24 @@ final class LocalStreamServer: @unchecked Sendable {
             let bytesToRead = Int(min(chunkSize, endOffset - currentOffset + 1))
 
             do {
-                // Request download chunk from TDLib
-                let file = try await tdClient.downloadFile(
-                    fileId: fileId,
-                    limit: Int64(bytesToRead),
-                    offset: currentOffset,
-                    priority: 32,
-                    synchronous: false
-                )
+                // 1. Check if bytes are already present in local cache (zero buffering for backward seek & already buffered segments)
+                let currentFile = try await tdClient.getFile(fileId: fileId)
+                var downloaded = bytesAvailable(in: currentFile, at: currentOffset, length: bytesToRead)
 
-                let available = bytesAvailable(in: file, at: currentOffset, length: bytesToRead)
-                var downloaded = available
+                // 2. If bytes are not yet cached, request immediate on-demand chunk with high priority
                 if downloaded == 0 {
-                    downloaded = await waitForBytes(broadcaster: broadcaster, at: currentOffset, length: bytesToRead, timeout: 12.0)
+                    let file = try await tdClient.downloadFile(
+                        fileId: fileId,
+                        limit: Int64(bytesToRead),
+                        offset: currentOffset,
+                        priority: 32,
+                        synchronous: false
+                    )
+
+                    downloaded = bytesAvailable(in: file, at: currentOffset, length: bytesToRead)
+                    if downloaded == 0 {
+                        downloaded = await waitForBytes(broadcaster: broadcaster, at: currentOffset, length: bytesToRead, timeout: 12.0)
+                    }
                 }
 
                 if downloaded == 0 {
@@ -317,8 +340,8 @@ final class LocalStreamServer: @unchecked Sendable {
                     continue
                 }
 
-                let currentFile = try await tdClient.getFile(fileId: fileId)
-                let path = currentFile.local.path
+                let fileForReading = try await tdClient.getFile(fileId: fileId)
+                let path = fileForReading.local.path
                 guard !path.isEmpty, let fileHandle = FileHandle(forReadingAtPath: path) else {
                     try await Task.sleep(nanoseconds: 200_000_000)
                     continue
