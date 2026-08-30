@@ -62,9 +62,22 @@ struct MainTabView: View {
     @State private var selectedTab = 0
     @ObservedObject var ipaDownloader = IPADownloader.shared
 
+    private var tabSelectionBinding: Binding<Int> {
+        Binding(
+            get: { selectedTab },
+            set: { newTab in
+                if newTab == 0 && selectedTab == 0 {
+                    // Tapped Chats tab while already on Chats tab -> Pop back to root all chats page
+                    NotificationCenter.default.post(name: NSNotification.Name("PopToChatListRoot"), object: nil)
+                }
+                selectedTab = newTab
+            }
+        )
+    }
+
     var body: some View {
         ZStack(alignment: .top) {
-            TabView(selection: $selectedTab) {
+            TabView(selection: tabSelectionBinding) {
                 ChatListView()
                     .tabItem {
                         Label("Chats", systemImage: "bubble.left.and.bubble.right.fill")

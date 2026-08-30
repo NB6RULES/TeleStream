@@ -19,6 +19,7 @@ struct ChatListView: View {
     @State private var isLoading = true
     @State private var searchText = ""
     @State private var selectedFilter: ChatFilter = .all
+    @State private var navigationRootId = UUID()
 
     var body: some View {
         NavigationView {
@@ -271,6 +272,14 @@ struct ChatListView: View {
             }
             .task {
                 await refreshChats()
+            }
+        }
+        .id(navigationRootId)
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("PopToChatListRoot"))) { _ in
+            withAnimation(.easeInOut(duration: 0.25)) {
+                selectedFilter = .all
+                searchText = ""
+                navigationRootId = UUID()
             }
         }
         .preferredColorScheme(.dark)
