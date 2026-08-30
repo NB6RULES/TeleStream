@@ -56,6 +56,7 @@ struct PlayerView: View {
     @State private var currentBrightness: CGFloat = 0
     @State private var showAspectHUD = false
     @State private var aspectHUDText = ""
+    @State private var showSpeedSelector = false
 
     @State private var skipTimer: Timer?
     @State private var volumeTimer: Timer?
@@ -526,26 +527,28 @@ struct PlayerView: View {
                             .clipShape(Circle())
                     }
 
-                    // Speed Menu (0.25x to 3.0x)
-                    Menu {
-                        ForEach(viewModel.availableRates, id: \.self) { rate in
-                            Button(action: { viewModel.setPlaybackRate(rate) }) {
-                                HStack {
-                                    Text(formatRate(rate))
-                                    if abs(viewModel.playbackRate - rate) < 0.01 {
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
-                            }
+                    // Speed Selector Button (0.25x to 3.0x)
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showSpeedSelector.toggle()
                         }
-                    } label: {
-                        Text(formatRate(viewModel.playbackRate))
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(Color.black.opacity(0.5))
-                            .clipShape(Capsule())
+                        viewModel.resetControlsTimer()
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "speedometer")
+                                .font(.system(size: 11, weight: .bold))
+                            Text(formatRate(viewModel.playbackRate))
+                                .font(.system(size: 13, weight: .bold))
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(showSpeedSelector ? Color(hex: "007AFF") : Color.black.opacity(0.5))
+                        .clipShape(Capsule())
+                        .overlay(
+                            Capsule()
+                                .stroke(showSpeedSelector ? Color.white.opacity(0.4) : Color.clear, lineWidth: 1)
+                        )
                     }
 
                     // Aspect Ratio Button (Avoid Dynamic Island vs Fill Dynamic Island)
@@ -563,6 +566,73 @@ struct PlayerView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 52)
+
+                // Horizontally Scrollable Speed Selector Overlay (Works perfectly in landscape and actively playing)
+                if showSpeedSelector {
+                    HStack(spacing: 8) {
+                        Image(systemName: "speedometer")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(Color(hex: "ADC6FF"))
+                            .padding(.leading, 12)
+
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(viewModel.availableRates, id: \.self) { rate in
+                                    Button(action: {
+                                        withAnimation(.easeInOut(duration: 0.15)) {
+                                            viewModel.setPlaybackRate(rate)
+                                        }
+                                        viewModel.resetControlsTimer()
+                                    }) {
+                                        HStack(spacing: 4) {
+                                            if abs(viewModel.playbackRate - rate) < 0.01 {
+                                                Image(systemName: "checkmark")
+                                                    .font(.system(size: 10, weight: .bold))
+                                            }
+                                            Text(formatRate(rate))
+                                                .font(.system(size: 13, weight: .bold))
+                                        }
+                                        .foregroundColor(abs(viewModel.playbackRate - rate) < 0.01 ? .white : Color(hex: "E3E2E7"))
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 7)
+                                        .background(
+                                            abs(viewModel.playbackRate - rate) < 0.01 ?
+                                            Color(hex: "007AFF") :
+                                            Color.white.opacity(0.12)
+                                        )
+                                        .clipShape(Capsule())
+                                    }
+                                }
+                            }
+                            .padding(.vertical, 6)
+                        }
+
+                        Button(action: {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                showSpeedSelector = false
+                            }
+                        }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 18))
+                                .foregroundColor(Color(hex: "8B90A0"))
+                                .padding(.trailing, 10)
+                        }
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule()
+                            .fill(Color.black.opacity(0.88))
+                            .overlay(
+                                Capsule()
+                                    .stroke(Color.white.opacity(0.18), lineWidth: 1)
+                            )
+                    )
+                    .shadow(color: Color.black.opacity(0.6), radius: 10)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
 
                 Spacer()
 
