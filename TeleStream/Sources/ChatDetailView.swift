@@ -18,15 +18,6 @@ struct ChatDetailView: View {
             if isLoading && videos.isEmpty {
                 ProgressView()
                     .tint(Color(hex: "ADC6FF"))
-            } else if videos.isEmpty {
-                VStack(spacing: 12) {
-                    Image(systemName: "video.slash")
-                        .font(.system(size: 32))
-                        .foregroundColor(Color(hex: "8B90A0"))
-                    Text("No videos in this chat")
-                        .font(.system(size: 15))
-                        .foregroundColor(Color(hex: "8B90A0"))
-                }
             } else {
                 VStack(spacing: 0) {
                     // Search bar
@@ -51,36 +42,73 @@ struct ChatDetailView: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
 
-                    ScrollView {
-                        LazyVStack(spacing: 12) {
-                            ForEach(filteredVideos, id: \.id) { message in
-                                if let info = extractVideoInfo(from: message) {
-                                    Button(action: {
-                                        selectedPlayerItem = ActivePlayerItem(
-                                            fileId: info.fileId,
-                                            fileSize: info.fileSize,
-                                            fileName: info.fileName,
-                                            chatId: chatId,
-                                            chatTitle: title,
-                                            duration: info.duration,
-                                            thumbnailFileId: info.thumbnailFile?.id,
-                                            allVideos: allVideosList
-                                        )
-                                    }) {
-                                        if let video = info.video {
-                                            VideoCard(video: video, caption: info.caption, timestamp: message.date)
-                                        } else {
-                                            DocumentVideoCard(fileName: info.fileName, fileSize: info.fileSize, caption: info.caption, timestamp: message.date, fileId: info.fileId, duration: info.duration, thumbnailFile: info.thumbnailFile)
-                                        }
-                                    }
-                                    .buttonStyle(CardPressButtonStyle())
-                                    .contentShape(Rectangle())
-                                }
+                    if filteredVideos.isEmpty {
+                        Spacer()
+                        VStack(spacing: 14) {
+                            if !searchText.isEmpty {
+                                Image(systemName: "magnifyingglass")
+                                    .font(.system(size: 34))
+                                    .foregroundColor(Color(hex: "8B90A0"))
+                                Text("No matching videos found")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundColor(Color(hex: "E3E2E7"))
+                                Text("No videos matching \"\(searchText)\"")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(Color(hex: "8B90A0"))
+                            } else if AppSettings.shared.hideClipsBelowMB > 0 {
+                                Image(systemName: "slider.horizontal.3")
+                                    .font(.system(size: 34))
+                                    .foregroundColor(Color(hex: "ADC6FF"))
+                                Text("No videos here above \(AppSettings.shared.hideClipsBelowMB) MB")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundColor(Color(hex: "E3E2E7"))
+                                Text("No videos in this chat above the specified size of \(AppSettings.shared.hideClipsBelowMB) MB. You can adjust this filter in Settings.")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(Color(hex: "8B90A0"))
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal, 32)
+                            } else {
+                                Image(systemName: "video.slash")
+                                    .font(.system(size: 34))
+                                    .foregroundColor(Color(hex: "8B90A0"))
+                                Text("No videos in this chat")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundColor(Color(hex: "E3E2E7"))
                             }
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.top, 8)
-                        .padding(.bottom, 80)
+                        Spacer()
+                    } else {
+                        ScrollView {
+                            LazyVStack(spacing: 12) {
+                                ForEach(filteredVideos, id: \.id) { message in
+                                    if let info = extractVideoInfo(from: message) {
+                                        Button(action: {
+                                            selectedPlayerItem = ActivePlayerItem(
+                                                fileId: info.fileId,
+                                                fileSize: info.fileSize,
+                                                fileName: info.fileName,
+                                                chatId: chatId,
+                                                chatTitle: title,
+                                                duration: info.duration,
+                                                thumbnailFileId: info.thumbnailFile?.id,
+                                                allVideos: allVideosList
+                                            )
+                                        }) {
+                                            if let video = info.video {
+                                                VideoCard(video: video, caption: info.caption, timestamp: message.date)
+                                            } else {
+                                                DocumentVideoCard(fileName: info.fileName, fileSize: info.fileSize, caption: info.caption, timestamp: message.date, fileId: info.fileId, duration: info.duration, thumbnailFile: info.thumbnailFile)
+                                            }
+                                        }
+                                        .buttonStyle(CardPressButtonStyle())
+                                        .contentShape(Rectangle())
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.top, 8)
+                            .padding(.bottom, 80)
+                        }
                     }
                 }
             }

@@ -566,60 +566,63 @@ struct PlayerView: View {
 
                 Spacer()
 
-                // Center Playback Controls
-                HStack(spacing: 40) {
-                    if viewModel.hasPrevious {
-                        Button(action: { viewModel.playPrevious() }) {
-                            Image(systemName: "backward.end.fill")
-                                .font(.system(size: 22))
+                // Center Playback Controls (hidden while buffering to prevent overlap with loading HUD)
+                if !viewModel.isLoading {
+                    HStack(spacing: 40) {
+                        if viewModel.hasPrevious {
+                            Button(action: { viewModel.playPrevious() }) {
+                                Image(systemName: "backward.end.fill")
+                                    .font(.system(size: 22))
+                                    .foregroundColor(.white)
+                                    .padding(14)
+                                    .background(Color.black.opacity(0.5))
+                                    .clipShape(Circle())
+                            }
+                        }
+
+                        // 10s back
+                        Button(action: { viewModel.seekRelative(seconds: -10) }) {
+                            Image(systemName: "gobackward.10")
+                                .font(.system(size: 26))
                                 .foregroundColor(.white)
                                 .padding(14)
                                 .background(Color.black.opacity(0.5))
                                 .clipShape(Circle())
                         }
-                    }
 
-                    // 10s back
-                    Button(action: { viewModel.seekRelative(seconds: -10) }) {
-                        Image(systemName: "gobackward.10")
-                            .font(.system(size: 26))
-                            .foregroundColor(.white)
-                            .padding(14)
-                            .background(Color.black.opacity(0.5))
-                            .clipShape(Circle())
-                    }
+                        // Play / Pause
+                        Button(action: { viewModel.togglePlayPause() }) {
+                            Image(systemName: viewModel.isPlaying ? "pause.fill" : "play.fill")
+                                .font(.system(size: 36))
+                                .foregroundColor(.white)
+                                .frame(width: 72, height: 72)
+                                .background(Color(hex: "007AFF"))
+                                .clipShape(Circle())
+                                .shadow(color: Color.black.opacity(0.4), radius: 8, x: 0, y: 4)
+                        }
 
-                    // Play / Pause
-                    Button(action: { viewModel.togglePlayPause() }) {
-                        Image(systemName: viewModel.isPlaying ? "pause.fill" : "play.fill")
-                            .font(.system(size: 36))
-                            .foregroundColor(.white)
-                            .frame(width: 72, height: 72)
-                            .background(Color(hex: "007AFF"))
-                            .clipShape(Circle())
-                            .shadow(color: Color.black.opacity(0.4), radius: 8, x: 0, y: 4)
-                    }
-
-                    // 10s forward
-                    Button(action: { viewModel.seekRelative(seconds: 10) }) {
-                        Image(systemName: "goforward.10")
-                            .font(.system(size: 26))
-                            .foregroundColor(.white)
-                            .padding(14)
-                            .background(Color.black.opacity(0.5))
-                            .clipShape(Circle())
-                    }
-
-                    if viewModel.hasNext {
-                        Button(action: { viewModel.playNext() }) {
-                            Image(systemName: "forward.end.fill")
-                                .font(.system(size: 22))
+                        // 10s forward
+                        Button(action: { viewModel.seekRelative(seconds: 10) }) {
+                            Image(systemName: "goforward.10")
+                                .font(.system(size: 26))
                                 .foregroundColor(.white)
                                 .padding(14)
                                 .background(Color.black.opacity(0.5))
                                 .clipShape(Circle())
                         }
+
+                        if viewModel.hasNext {
+                            Button(action: { viewModel.playNext() }) {
+                                Image(systemName: "forward.end.fill")
+                                    .font(.system(size: 22))
+                                    .foregroundColor(.white)
+                                    .padding(14)
+                                    .background(Color.black.opacity(0.5))
+                                    .clipShape(Circle())
+                            }
+                        }
                     }
+                    .transition(.opacity)
                 }
 
                 Spacer()
@@ -900,6 +903,9 @@ class PlayerViewModel: ObservableObject {
                     self.isLoading = true
                 case .bufferFinished:
                     self.isLoading = false
+                    if self.isPlaying {
+                        self.ksPlayerView?.playerLayer?.player.play()
+                    }
                 case .playedToTheEnd:
                     self.isPlaying = false
                     if self.hasNext && AppSettings.shared.autoNextEpisode {
@@ -914,7 +920,10 @@ class PlayerViewModel: ObservableObject {
             }
         }
 
-        let resource = KSPlayerResource(url: url, options: KSOptions(), name: title)
+        let options = KSOptions()
+        options.isAutoPlay = true
+        options.isSeekedAutoPlay = true
+        let resource = KSPlayerResource(url: url, options: options, name: title)
         playerView.set(resource: resource)
     }
 
@@ -992,10 +1001,13 @@ class PlayerViewModel: ObservableObject {
     func seek(to seconds: Double) {
         currentPosition = seconds
         if isMKV {
+            let wasPlaying = isPlaying
             ksPlayerView?.playerLayer?.player.seek(time: seconds) { [weak self] _ in
                 Task { @MainActor [weak self] in
                     guard let self else { return }
-                    if self.isPlaying {
+                    if wasPlaying {
+                        self.isPlaying = true
+                        self.ksPlayerView?.playerLayer?.player.play()
                         self.ksPlayerView?.playerLayer?.player.playbackRate = self.playbackRate
                     }
                 }
@@ -1180,7 +1192,14 @@ class PlayerViewModel: ObservableObject {
     private func restorePosition() {
         if let saved = AppSettings.shared.playbackPositions[currentFileId], saved > 3 {
             if isMKV {
-                ksPlayerView?.playerLayer?.player.seek(time: saved) { _ in }
+                ksPlayerView?.playerLayer?.player.seek(time: saved) { [weak self] _ in
+                    Task { @MainActor [weak self] in
+                        guard let self else { return }
+                        if self.isPlaying {
+                            self.ksPlayerView?.playerLayer?.player.play()
+                        }
+                    }
+                }
             } else {
                 let time = CMTime(seconds: saved, preferredTimescale: 600)
                 player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)

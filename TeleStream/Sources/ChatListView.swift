@@ -116,13 +116,57 @@ struct ChatListView: View {
                         Spacer()
                     } else if filteredChats.isEmpty {
                         Spacer()
-                        VStack(spacing: 12) {
-                            Image(systemName: emptyStateIcon)
-                                .font(.system(size: 38))
-                                .foregroundColor(Color(hex: "8B90A0"))
-                            Text(emptyStateText)
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundColor(Color(hex: "8B90A0"))
+                        if selectedFilter == .favourites && searchText.isEmpty {
+                            VStack(spacing: 16) {
+                                ZStack {
+                                    Circle()
+                                        .fill(Color.yellow.opacity(0.15))
+                                        .frame(width: 76, height: 76)
+                                    Image(systemName: "star.fill")
+                                        .font(.system(size: 34))
+                                        .foregroundColor(.yellow)
+                                }
+
+                                VStack(spacing: 8) {
+                                    Text("No Favourites Yet")
+                                        .font(.system(size: 18, weight: .bold))
+                                        .foregroundColor(Color(hex: "E3E2E7"))
+
+                                    Text("Swipe right on any chat in the list or press and hold a chat to select 'Add to Favourites'.")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(Color(hex: "8B90A0"))
+                                        .multilineTextAlignment(.center)
+                                        .padding(.horizontal, 32)
+                                }
+
+                                Button(action: {
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        selectedFilter = .all
+                                    }
+                                }) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "bubble.left.and.bubble.right.fill")
+                                        Text("Browse All Chats")
+                                    }
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 20)
+                                    .padding(.vertical, 10)
+                                    .background(Color(hex: "007AFF"))
+                                    .clipShape(Capsule())
+                                }
+                                .padding(.top, 4)
+                            }
+                            .padding(.horizontal, 24)
+                        } else {
+                            VStack(spacing: 12) {
+                                Image(systemName: emptyStateIcon)
+                                    .font(.system(size: 38))
+                                    .foregroundColor(Color(hex: "8B90A0"))
+                                Text(emptyStateText)
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(Color(hex: "8B90A0"))
+                            }
                         }
                         Spacer()
                     } else {
@@ -200,6 +244,16 @@ struct ChatListView: View {
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     HStack(spacing: 8) {
+                        // Prominent Refresh button
+                        Button(action: { Task { await refreshChats() } }) {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundColor(Color(hex: "E3E2E7"))
+                                .frame(width: 32, height: 32)
+                                .background(Color(hex: "1E1F23"))
+                                .clipShape(Circle())
+                        }
+
                         // 3-dots / View style & options menu
                         Menu {
                             Section(header: Text("Layout Style")) {
@@ -222,9 +276,6 @@ struct ChatListView: View {
                             }
 
                             Section {
-                                Button(action: { Task { await refreshChats() } }) {
-                                    Label("Refresh Chats", systemImage: "arrow.clockwise")
-                                }
                                 Button(action: { showSettings = true }) {
                                     Label("Settings", systemImage: "gearshape")
                                 }
