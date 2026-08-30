@@ -101,10 +101,7 @@ final class TelegramClient: ObservableObject {
                 self.qrCodeUrl = nil
                 self.authError = nil
                 self.passwordHint = nil
-                Task {
-                    await self.fetchCurrentUser()
-                    self.enforceCacheLimit()
-                }
+                Task { await self.fetchCurrentUser() }
             case .authorizationStateClosed:
                 self.reinitClient()
             default:
@@ -416,52 +413,9 @@ final class TelegramClient: ObservableObject {
         return nil
     }
 
-    // MARK: - Cache Management & Progressive Downloading
+    // MARK: - Cache Management
 
-    func startBackgroundFullDownload(fileId: Int, priority: Int = 16) {
-        Task {
-            do {
-                let file = try await client.getFile(fileId: fileId)
-                if !file.local.isDownloadingCompleted && !file.local.isDownloadingActive {
-                    _ = try await client.downloadFile(
-                        fileId: fileId,
-                        limit: 0,
-                        offset: 0,
-                        priority: priority,
-                        synchronous: false
-                    )
-                    print("[TelegramClient] Started full background download for fileId: \(fileId)")
-                }
-            } catch {
-                print("[TelegramClient] startBackgroundFullDownload error for fileId \(fileId): \(error)")
-            }
-        }
-    }
-
-    func deleteCachedFile(fileId: Int) async {
-        do {
-            _ = try? await client.cancelDownloadFile(fileId: fileId, onlyIfPending: false)
-            _ = try await client.deleteFile(fileId: fileId)
-            print("[TelegramClient] Successfully evicted/deleted fileId \(fileId) from cache")
-        } catch {
-            print("[TelegramClient] deleteCachedFile error for fileId \(fileId): \(error)")
-        }
-    }
-
-    func enforceCacheLimit() {
-        Task { @MainActor in
-            let maxCached = AppSettings.shared.maxCachedVideos
-            let watching = AppSettings.shared.continueWatching
-
-            guard watching.count > maxCached else { return }
-
-            // Everything from index `maxCached` onwards is at position (N+1) or older
-            let evictItems = watching.suffix(from: maxCached)
-            for item in evictItems {
-                await self.deleteCachedFile(fileId: item.fileId)
-            }
-        }
-    }
+    static let maxCachedVideos = 3
 
     func getCacheSize() async -> Int64 {
         let documents = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true)[0]
