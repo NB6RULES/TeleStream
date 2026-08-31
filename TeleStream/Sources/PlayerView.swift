@@ -1565,9 +1565,6 @@ final class CustomKSPlayerView: IOSVideoPlayerView {
         navigationBar.isHidden = true
         navigationBar.alpha = 0
         navigationBar.isUserInteractionEnabled = false
-        loadingView.isHidden = true
-        loadingView.alpha = 0
-        loadingView.isUserInteractionEnabled = false
         replayButton.isHidden = true
         replayButton.alpha = 0
         replayButton.isUserInteractionEnabled = false
