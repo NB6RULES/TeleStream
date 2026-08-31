@@ -35,6 +35,9 @@ interface PlayerControlsProps {
   onPlaybackRateChange: (rate: number) => void;
   onSkip: (seconds: number) => void;
   onToggleNetworkStatus?: () => void;
+  audioBoost?: number;
+  onAudioBoostChange?: (boost: number) => void;
+  streamUrl?: string;
 }
 
 export const PlayerControls: React.FC<PlayerControlsProps> = ({
@@ -56,7 +59,10 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
   onAspectRatioChange,
   onPlaybackRateChange,
   onSkip,
-  onToggleNetworkStatus
+  onToggleNetworkStatus,
+  audioBoost = 1,
+  onAudioBoostChange,
+  streamUrl
 }) => {
   const [showSettings, setShowSettings] = useState(false);
   const [hoverTime, setHoverTime] = useState<number | null>(null);
@@ -285,6 +291,48 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({
                     ))}
                   </div>
                 </div>
+
+                {onAudioBoostChange && (
+                  <div className="border-t border-slate-800 pt-2">
+                    <div className="font-semibold text-slate-300 mb-1.5 uppercase text-[10px] tracking-wider flex items-center justify-between">
+                      <span>Audio Boost</span>
+                      <span className="text-[9px] text-[#ADC6FF] lowercase font-normal">5.1 downmix</span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-1">
+                      {[1, 1.5, 2, 3].map((boost) => (
+                        <button
+                          key={boost}
+                          type="button"
+                          onClick={() => onAudioBoostChange(boost)}
+                          className={`px-1.5 py-1 rounded-lg text-center cursor-pointer text-[11px] ${
+                            audioBoost === boost
+                              ? 'bg-telegram-blue text-white font-semibold'
+                              : 'text-slate-300 hover:bg-slate-800'
+                          }`}
+                        >
+                          {boost === 1 ? '100%' : `${boost * 100}%`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {streamUrl && (
+                  <div className="border-t border-slate-800 pt-2 space-y-1.5">
+                    <div className="font-semibold text-slate-300 uppercase text-[10px] tracking-wider">
+                      External Player (MKV / AC3 / DTS)
+                    </div>
+                    <a
+                      href={`vlc://${typeof window !== 'undefined' ? window.location.origin : ''}${streamUrl}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-[#007AFF]/20 hover:bg-[#007AFF]/30 text-white font-medium text-xs transition-colors cursor-pointer border border-[#007AFF]/40"
+                    >
+                      <span>Open in VLC Player</span>
+                      <span className="text-[10px] opacity-75">↗</span>
+                    </a>
+                  </div>
+                )}
               </div>
             )}
           </div>

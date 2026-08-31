@@ -36,6 +36,42 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
   const [isNetworkStatusOpen, setIsNetworkStatusOpen] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [isPip, setIsPip] = useState(false);
+  const [audioBoost, setAudioBoost] = useState<number>(1);
+
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const gainNodeRef = useRef<GainNode | null>(null);
+  const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
+
+  const handleAudioBoostChange = (boost: number) => {
+    setAudioBoost(boost);
+    if (!videoRef.current) return;
+    try {
+      if (!audioCtxRef.current) {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        audioCtxRef.current = new AudioCtx();
+        gainNodeRef.current = audioCtxRef.current.createGain();
+        sourceNodeRef.current = audioCtxRef.current.createMediaElementSource(videoRef.current);
+        sourceNodeRef.current.connect(gainNodeRef.current);
+        gainNodeRef.current.connect(audioCtxRef.current.destination);
+      }
+      if (audioCtxRef.current.state === 'suspended') {
+        audioCtxRef.current.resume();
+      }
+      if (gainNodeRef.current) {
+        gainNodeRef.current.gain.value = boost;
+      }
+    } catch (e) {
+      console.warn('[AudioBoost] WebAudio error:', e);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
+        audioCtxRef.current.close().catch(() => {});
+      }
+    };
+  }, []);
 
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -351,7 +387,20 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
           </div>
         </div>
 
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-2.5">
+          {isMkv && (
+            <a
+              href={`vlc://${typeof window !== 'undefined' ? window.location.origin : ''}${streamUrl}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3 py-1.5 rounded-full bg-[#007AFF]/20 hover:bg-[#007AFF]/30 border border-[#007AFF]/40 text-[#ADC6FF] hover:text-white text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer shadow-lg"
+              title="If audio codec is AC3/DTS and silent in browser, click to stream via VLC"
+            >
+              <span>VLC Audio</span>
+              <span className="text-[10px]">↗</span>
+            </a>
+          )}
+
           <button
             type="button"
             onClick={onClose}
@@ -452,6 +501,9 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
           onPlaybackRateChange={handlePlaybackRateChange}
           onSkip={handleSkip}
           onToggleNetworkStatus={() => setIsNetworkStatusOpen(!isNetworkStatusOpen)}
+          audioBoost={audioBoost}
+          onAudioBoostChange={handleAudioBoostChange}
+          streamUrl={streamUrl}
         />
       </div>
 
