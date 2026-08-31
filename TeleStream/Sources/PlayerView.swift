@@ -567,7 +567,7 @@ struct PlayerView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 52)
 
-                // Centered Speed Selector Overlay (bounded strictly to screen width without overflow or vertical scrolling)
+                // Centered Speed Selector Overlay (strictly horizontal scroll, locked against vertical sliding/bouncing)
                 if showSpeedSelector {
                     HStack {
                         Spacer()
@@ -597,7 +597,7 @@ struct PlayerView: View {
                                                 }
                                                 .foregroundColor(abs(viewModel.playbackRate - rate) < 0.01 ? .white : Color(hex: "E3E2E7"))
                                                 .padding(.horizontal, 10)
-                                                .padding(.vertical, 6)
+                                                .frame(height: 28)
                                                 .background(
                                                     abs(viewModel.playbackRate - rate) < 0.01 ?
                                                     Color(hex: "007AFF") :
@@ -605,14 +605,15 @@ struct PlayerView: View {
                                                 )
                                                 .clipShape(Capsule())
                                             }
+                                            .buttonStyle(.plain)
                                             .id(rate)
                                         }
                                     }
                                     .padding(.horizontal, 4)
-                                    .frame(height: 34)
+                                    .frame(height: 32)
                                 }
-                                .frame(height: 34)
-                                .clipped()
+                                .frame(height: 32)
+                                .background(StrictHorizontalScrollViewConfigurator())
                                 .onAppear {
                                     proxy.scrollTo(viewModel.playbackRate, anchor: .center)
                                 }
@@ -633,6 +634,7 @@ struct PlayerView: View {
                                     .foregroundColor(Color(hex: "8B90A0"))
                                     .padding(.trailing, 10)
                             }
+                            .buttonStyle(.plain)
                         }
                         .padding(.vertical, 4)
                         .frame(height: 44)
@@ -1499,24 +1501,61 @@ class GestureCoordinator: NSObject, UIGestureRecognizerDelegate {
     }
 }
 
-// Custom KSPlayer subclass to hook into player state transitions
+// Custom KSPlayer subclass to hook into player state transitions and suppress all built-in UI
 final class CustomKSPlayerView: IOSVideoPlayerView {
     var onStateChange: ((KSPlayerState) -> Void)?
 
+    override func didAddSubview(_ subview: UIView) {
+        super.didAddSubview(subview)
+        hideInternalView(subview)
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        hideAllInternalUI()
+    }
+
     override func player(layer: KSPlayerLayer, state: KSPlayerState) {
         super.player(layer: layer, state: state)
+        hideAllInternalUI()
         onStateChange?(state)
     }
 
     override func updateUI(isLandscape: Bool) {
         super.updateUI(isLandscape: isLandscape)
-        toolBar.isHidden = true
-        navigationBar.isHidden = true
-        subviews.forEach { view in
-            // Hide all KSPlayer specific subviews except the playerLayer which is a CALayer
-            if view != self {
-                view.isHidden = true
+        hideAllInternalUI()
+    }
+
+    private func hideInternalView(_ view: UIView) {
+        if view != self {
+            view.isHidden = true
+            view.alpha = 0
+            view.isUserInteractionEnabled = false
+            for g in view.gestureRecognizers ?? [] {
+                g.isEnabled = false
             }
+            for sub in view.subviews {
+                hideInternalView(sub)
+            }
+        }
+    }
+
+    func hideAllInternalUI() {
+        toolBar.isHidden = true
+        toolBar.alpha = 0
+        toolBar.isUserInteractionEnabled = false
+        navigationBar.isHidden = true
+        navigationBar.alpha = 0
+        navigationBar.isUserInteractionEnabled = false
+        loadingView.isHidden = true
+        loadingView.alpha = 0
+        loadingView.isUserInteractionEnabled = false
+        replayButton.isHidden = true
+        replayButton.alpha = 0
+        replayButton.isUserInteractionEnabled = false
+
+        subviews.forEach { view in
+            hideInternalView(view)
         }
     }
 }
@@ -1535,8 +1574,7 @@ struct KSVideoPlayerSurfaceView: UIViewRepresentable {
         KSOptions.isSeekedAutoPlay = true
 
         let playerView = CustomKSPlayerView()
-        playerView.toolBar.isHidden = true
-        playerView.navigationBar.isHidden = true
+        playerView.hideAllInternalUI()
         playerView.backgroundColor = .black
         playerView.contentMode = (viewModel.videoGravity == .resizeAspect) ? .scaleAspectFit : .scaleAspectFill
 
@@ -1551,6 +1589,7 @@ struct KSVideoPlayerSurfaceView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: CustomKSPlayerView, context: Context) {
+        uiView.hideAllInternalUI()
         UIView.animate(withDuration: 0.25) {
             uiView.contentMode = (viewModel.videoGravity == .resizeAspect) ? .scaleAspectFit : .scaleAspectFill
         }
@@ -1580,3 +1619,40 @@ class PlayerUIView: UIView {
     override class var layerClass: AnyClass { AVPlayerLayer.self }
     var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
 }
+
+// Helper to strictly lock ScrollView to horizontal only, eliminating any vertical scrolling, bouncing, or sliding
+struct StrictHorizontalScrollViewConfigurator: UIViewRepresentable {
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.backgroundColor = .clear
+        view.isUserInteractionEnabled = false
+        DispatchQueue.main.async {
+            self.lockHorizontal(view: view)
+        }
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        DispatchQueue.main.async {
+            self.lockHorizontal(view: uiView)
+        }
+    }
+
+    private func lockHorizontal(view: UIView) {
+        var current: UIView? = view
+        while let v = current {
+            if let scrollView = v as? UIScrollView {
+                scrollView.alwaysBounceVertical = false
+                scrollView.alwaysBounceHorizontal = true
+                scrollView.showsVerticalScrollIndicator = false
+                scrollView.isDirectionalLockEnabled = true
+                if scrollView.contentOffset.y != 0 {
+                    scrollView.contentOffset.y = 0
+                }
+                break
+            }
+            current = v.superview
+        }
+    }
+}
+
