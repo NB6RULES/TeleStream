@@ -336,8 +336,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
           }}
           onPlay={() => setIsPlaying(true)}
           onPause={() => setIsPlaying(false)}
-          onEnterPictureInPicture={() => setIsPip(true)}
-          onLeavePictureInPicture={() => setIsPip(false)}
           onError={() => {
             console.log('[VideoPlayer] Stream buffering from Telegram MTProto');
           }}
