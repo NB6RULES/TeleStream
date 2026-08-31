@@ -200,6 +200,42 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
     }
   };
 
+  const isInteractingWithControlsRef = useRef(false);
+
+  const scheduleControlsHide = useCallback((delay = 3500) => {
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
+    }
+    controlsTimeoutRef.current = setTimeout(() => {
+      if (videoRef.current && !videoRef.current.paused && !isInteractingWithControlsRef.current) {
+        setShowControls(false);
+      }
+    }, delay);
+  }, []);
+
+  const handleUserActivity = useCallback(() => {
+    setShowControls(true);
+    scheduleControlsHide(3500);
+  }, [scheduleControlsHide]);
+
+  // Fullscreen change synchronization
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const isFs = !!document.fullscreenElement;
+      setIsFullscreen(isFs);
+      setShowControls(true);
+      scheduleControlsHide(3500);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+    };
+  }, [scheduleControlsHide]);
+
   const handlePlaybackRateChange = (rate: number) => {
     if (videoRef.current) {
       videoRef.current.playbackRate = rate;
@@ -208,15 +244,17 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
   };
 
   const handleMouseMove = () => {
-    setShowControls(true);
-    if (controlsTimeoutRef.current) {
-      clearTimeout(controlsTimeoutRef.current);
+    handleUserActivity();
+  };
+
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    if (!showControls) {
+      e.stopPropagation();
+      setShowControls(true);
+      scheduleControlsHide(3500);
+      return;
     }
-    controlsTimeoutRef.current = setTimeout(() => {
-      if (isPlaying) {
-        setShowControls(false);
-      }
-    }, 3000);
+    togglePlay();
   };
 
   useEffect(() => {
@@ -275,14 +313,23 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
     <div
       ref={containerRef}
       onMouseMove={handleMouseMove}
-      onMouseLeave={() => setShowControls(false)}
+      onTouchStart={handleUserActivity}
       className={`fixed inset-0 z-50 flex flex-col items-center justify-center select-none overflow-hidden transition-opacity duration-300 ${
         isPip ? 'opacity-0 pointer-events-none' : 'bg-black'
       }`}
     >
       {/* Top Overlay Header */}
       <div
-        className={`absolute inset-x-0 top-0 bg-gradient-to-b from-black/80 via-black/40 to-transparent p-4 sm:p-6 z-20 transition-opacity duration-300 flex items-center justify-between ${
+        onMouseEnter={() => {
+          isInteractingWithControlsRef.current = true;
+          if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+          setShowControls(true);
+        }}
+        onMouseLeave={() => {
+          isInteractingWithControlsRef.current = false;
+          scheduleControlsHide(2500);
+        }}
+        className={`absolute inset-x-0 top-0 bg-gradient-to-b from-black/90 via-black/50 to-transparent p-4 sm:p-6 z-30 transition-opacity duration-200 flex items-center justify-between ${
           showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
       >
@@ -319,7 +366,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
       {/* Video Element Container */}
       <div
         className="relative w-full h-full flex items-center justify-center cursor-pointer"
-        onClick={togglePlay}
+        onClick={handleBackdropClick}
       >
         <video
           ref={videoRef}
@@ -334,8 +381,15 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
             setIsPlaying(true);
             setIsBuffering(false);
           }}
-          onPlay={() => setIsPlaying(true)}
-          onPause={() => setIsPlaying(false)}
+          onPlay={() => {
+            setIsPlaying(true);
+            scheduleControlsHide(3000);
+          }}
+          onPause={() => {
+            setIsPlaying(false);
+            setShowControls(true);
+            if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+          }}
           onError={() => {
             console.log('[VideoPlayer] Stream buffering from Telegram MTProto');
           }}
@@ -364,7 +418,20 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
       </div>
 
       {/* Custom Bottom Controls */}
-      <div className={showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}>
+      <div
+        onMouseEnter={() => {
+          isInteractingWithControlsRef.current = true;
+          if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+          setShowControls(true);
+        }}
+        onMouseLeave={() => {
+          isInteractingWithControlsRef.current = false;
+          scheduleControlsHide(2500);
+        }}
+        className={`z-30 transition-opacity duration-200 ${
+          showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        }`}
+      >
         <PlayerControls
           isPlaying={isPlaying}
           currentTime={currentTime}
