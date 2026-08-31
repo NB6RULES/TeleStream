@@ -5,9 +5,26 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
+let globalDeferredPrompt: BeforeInstallPromptEvent | null = null;
+const globalListeners = new Set<(prompt: BeforeInstallPromptEvent | null) => void>();
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeinstallprompt', (e: Event) => {
+    e.preventDefault();
+    globalDeferredPrompt = e as BeforeInstallPromptEvent;
+    globalListeners.forEach((listener) => listener(globalDeferredPrompt));
+  });
+
+  window.addEventListener('appinstalled', () => {
+    globalDeferredPrompt = null;
+    globalListeners.forEach((listener) => listener(null));
+    console.log('[PWA] TeleStream app successfully installed');
+  });
+}
+
 export function usePwaInstall() {
-  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [isInstallable, setIsInstallable] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(globalDeferredPrompt);
+  const [isInstallable, setIsInstallable] = useState(!!globalDeferredPrompt);
   const [isInstalled, setIsInstalled] = useState(false);
   const [showMobileBanner, setShowMobileBanner] = useState(false);
 
@@ -19,57 +36,55 @@ export function usePwaInstall() {
 
     if (isStandalone) {
       setIsInstalled(true);
+      setIsInstallable(false);
       return;
     }
 
-    const handleBeforeInstall = (e: Event) => {
-      e.preventDefault();
-      const promptEvent = e as BeforeInstallPromptEvent;
-      setDeferredPrompt(promptEvent);
+    if (globalDeferredPrompt) {
+      setDeferredPrompt(globalDeferredPrompt);
       setIsInstallable(true);
-
       const dismissed = sessionStorage.getItem('telestream_pwa_banner_dismissed');
       if (!dismissed) {
         setShowMobileBanner(true);
       }
+    }
+
+    const listener = (prompt: BeforeInstallPromptEvent | null) => {
+      setDeferredPrompt(prompt);
+      setIsInstallable(!!prompt);
+      if (prompt) {
+        const dismissed = sessionStorage.getItem('telestream_pwa_banner_dismissed');
+        if (!dismissed) {
+          setShowMobileBanner(true);
+        }
+      }
     };
 
-    const handleAppInstalled = () => {
-      setIsInstalled(true);
-      setIsInstallable(false);
-      setShowMobileBanner(false);
-      setDeferredPrompt(null);
-      console.log('[PWA] TeleStream app successfully installed');
-    };
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
-    window.addEventListener('appinstalled', handleAppInstalled);
+    globalListeners.add(listener);
 
     return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
-      window.removeEventListener('appinstalled', handleAppInstalled);
+      globalListeners.delete(listener);
     };
   }, []);
 
   const promptInstall = async (): Promise<boolean> => {
-    if (!deferredPrompt) {
-      // Fallback instructions if prompt not available (e.g. iOS Safari)
+    const promptEvent = deferredPrompt || globalDeferredPrompt;
+    if (!promptEvent) {
       if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
         alert('To install TeleStream on iOS:\n1. Tap the Share button in Safari\n2. Select "Add to Home Screen"');
-      } else {
-        alert('To install TeleStream:\nUse your browser menu and select "Install App" or "Add to Home Screen"');
       }
       return false;
     }
 
     try {
-      await deferredPrompt.prompt();
-      const choice = await deferredPrompt.userChoice;
+      await promptEvent.prompt();
+      const choice = await promptEvent.userChoice;
       if (choice.outcome === 'accepted') {
         setIsInstalled(true);
         setIsInstallable(false);
         setShowMobileBanner(false);
         setDeferredPrompt(null);
+        globalDeferredPrompt = null;
         return true;
       }
     } catch (err) {
@@ -84,7 +99,7 @@ export function usePwaInstall() {
   };
 
   return {
-    isInstallable: isInstallable || !isInstalled,
+    isInstallable: isInstallable || !!globalDeferredPrompt || !isInstalled,
     isInstalled,
     showMobileBanner: showMobileBanner && !isInstalled,
     promptInstall,

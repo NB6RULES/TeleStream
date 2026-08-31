@@ -1,0 +1,25 @@
+﻿{
+  "name": "TeleStream — Telegram Media Player",
+  "short_name": "TeleStream",
+  "description": "Stream Telegram videos directly in your browser with full player controls, subtitles, audio tracks, and PiP.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b0f19",
+  "theme_color": "#0088cc",
+  "icons": [
+    {
+      "src": "./AppIcon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./AppIcon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
