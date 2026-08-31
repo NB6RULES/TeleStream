@@ -306,28 +306,21 @@ final class LocalStreamServer: @unchecked Sendable {
                     synchronous: false
                 )
 
-                let initialDlSize = Int64(file.local.downloadedSize)
-                let available = bytesAvailable(in: file, at: currentOffset, length: bytesToRead, initialDownloadedSize: initialDlSize)
+                let available = bytesAvailable(in: file, at: currentOffset, length: bytesToRead)
                 var downloaded = available
                 if downloaded == 0 {
-                    downloaded = await waitForBytes(
-                        broadcaster: broadcaster,
-                        at: currentOffset,
-                        length: bytesToRead,
-                        initialDownloadedSize: initialDlSize,
-                        timeout: 10.0
-                    )
+                    downloaded = await waitForBytes(broadcaster: broadcaster, at: currentOffset, length: bytesToRead, timeout: 12.0)
                 }
 
                 if downloaded == 0 {
-                    try await Task.sleep(nanoseconds: 150_000_000)
+                    try await Task.sleep(nanoseconds: 200_000_000)
                     continue
                 }
 
                 let currentFile = try await tdClient.getFile(fileId: fileId)
                 let path = currentFile.local.path
                 guard !path.isEmpty, let fileHandle = FileHandle(forReadingAtPath: path) else {
-                    try await Task.sleep(nanoseconds: 150_000_000)
+                    try await Task.sleep(nanoseconds: 200_000_000)
                     continue
                 }
 
@@ -336,7 +329,7 @@ final class LocalStreamServer: @unchecked Sendable {
                 fileHandle.closeFile()
 
                 guard !data.isEmpty else {
-                    try await Task.sleep(nanoseconds: 150_000_000)
+                    try await Task.sleep(nanoseconds: 200_000_000)
                     continue
                 }
 
@@ -358,7 +351,7 @@ final class LocalStreamServer: @unchecked Sendable {
                 if errorCount > 15 {
                     break
                 }
-                try? await Task.sleep(nanoseconds: 300_000_000)
+                try? await Task.sleep(nanoseconds: 500_000_000)
                 continue
             }
         }
@@ -366,7 +359,7 @@ final class LocalStreamServer: @unchecked Sendable {
         closeConnection(connectionId)
     }
 
-    private func bytesAvailable(in file: TDLibKit.File, at offset: Int64, length: Int, initialDownloadedSize: Int64? = nil) -> Int {
+    private func bytesAvailable(in file: TDLibKit.File, at offset: Int64, length: Int) -> Int {
         if file.local.isDownloadingCompleted {
             return length
         }
@@ -374,32 +367,21 @@ final class LocalStreamServer: @unchecked Sendable {
         if prefix > 0 && offset < prefix {
             return Int(min(Int64(length), prefix - offset))
         }
-        let dlOffset = Int64(file.local.downloadOffset)
-        if dlOffset > offset {
-            return Int(min(Int64(length), dlOffset - offset))
-        }
-        if let initial = initialDownloadedSize {
-            let totalDl = Int64(file.local.downloadedSize)
-            if totalDl > initial {
-                return Int(min(Int64(length), totalDl - initial))
-            }
+        let chunkStart = Int64(file.local.downloadOffset)
+        let chunkEnd = chunkStart + prefix
+        if prefix > 0 && offset >= chunkStart && offset < chunkEnd {
+            return Int(min(Int64(length), chunkEnd - offset))
         }
         return 0
     }
 
-    private func waitForBytes(
-        broadcaster: FileUpdateBroadcaster,
-        at offset: Int64,
-        length: Int,
-        initialDownloadedSize: Int64,
-        timeout: Double
-    ) async -> Int {
+    private func waitForBytes(broadcaster: FileUpdateBroadcaster, at offset: Int64, length: Int, timeout: Double) async -> Int {
         let stream = broadcaster.subscribe()
         let deadline = ContinuousClock.now + .seconds(timeout)
 
         for await file in stream {
             if ContinuousClock.now >= deadline { break }
-            let avail = bytesAvailable(in: file, at: offset, length: length, initialDownloadedSize: initialDownloadedSize)
+            let avail = bytesAvailable(in: file, at: offset, length: length)
             if avail > 0 {
                 return avail
             }
