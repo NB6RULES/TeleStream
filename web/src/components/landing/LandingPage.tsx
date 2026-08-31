@@ -113,7 +113,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               className="py-2 sm:py-2.5 px-4 sm:px-5 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-bold text-xs sm:text-sm flex items-center space-x-2 shadow-lg shadow-sky-500/25 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
             >
               <Play className="w-3.5 h-3.5 fill-white" />
-              <span>{isAuthenticated ? 'Open Player' : 'Launch Player (Android & Web)'}</span>
+              <span>{isAuthenticated ? 'Open Player' : 'Launch Web Player'}</span>
             </button>
           </div>
         </div>
@@ -136,7 +136,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
           {/* Subtitle */}
           <p className="mt-6 text-base sm:text-xl text-slate-300 max-w-2xl mx-auto leading-relaxed">
-            Instant playback with HTTP 206 chunk-range streaming on Android, Web & Desktop. Zero full downloads, zero waiting, and no backend servers.
+            Instant playback with HTTP 206 chunk-range streaming. No full downloads, zero waiting, and no backend servers between you and Telegram.
           </p>
 
           {/* Hero CTAs */}
@@ -147,7 +147,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               className="w-full sm:w-auto py-3.5 px-8 rounded-2xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-extrabold text-sm sm:text-base flex items-center justify-center space-x-2.5 shadow-xl shadow-sky-500/25 transition-all hover:scale-105 active:scale-95 cursor-pointer"
             >
               <Play className="w-4 h-4 fill-white" />
-              <span>{isAuthenticated ? 'Open Streaming Player' : 'Launch Player (Android & Web)'}</span>
+              <span>{isAuthenticated ? 'Open Streaming Player' : 'Launch Web Streamer'}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
 

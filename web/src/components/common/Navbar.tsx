@@ -1,135 +1,135 @@
 import React from 'react';
-import { Search, LogOut, RefreshCw, Download } from 'lucide-react';
+import { RefreshCw, Settings, LogOut, Download } from 'lucide-react';
 import { TDLibUser } from '../../types/tdlib';
 
-const GithubIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
+const GithubIcon = ({ className = 'w-4 h-4' }: { className?: string }) => (
   <svg className={className} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-    <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
+    <path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"
+    />
   </svg>
 );
 
 interface NavbarProps {
   user: TDLibUser | null;
-  searchQuery: string;
-  onSearchChange: (q: string) => void;
-  onLogout: () => void;
   onRefresh?: () => void;
-  onBackToHome?: () => void;
+  onOpenSettings?: () => void;
+  onLogout?: () => void;
   onInstall?: () => void;
   isRefreshing?: boolean;
-  isServiceWorkerReady?: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   user,
-  searchQuery,
-  onSearchChange,
-  onLogout,
   onRefresh,
-  onBackToHome,
+  onOpenSettings,
+  onLogout,
   onInstall,
   isRefreshing = false,
 }) => {
   return (
-    <header className="sticky top-0 z-30 w-full bg-slate-900/90 backdrop-blur-xl border-b border-slate-800 px-3 sm:px-4 lg:px-6 py-2.5">
+    <header className="sticky top-0 z-30 w-full bg-[#000000]/95 backdrop-blur-xl border-b border-[#1E1F23] px-3 sm:px-5 py-2.5 select-none">
       <div className="w-full flex items-center justify-between gap-3">
-        {/* Left: Brand Logo positioned close to the edge */}
+        {/* Left: Brand Logo & Title */}
         <div className="flex items-center space-x-2.5 flex-shrink-0">
-          <button
-            type="button"
-            className="flex items-center space-x-2.5 cursor-pointer hover:opacity-80 transition-opacity bg-transparent border-0 p-0 focus:outline-none"
-            onClick={onBackToHome}
-            title="Return to Home / Landing Page"
-          >
-            <img
-              src={`${import.meta.env.BASE_URL}AppIcon.png`}
-              alt="TeleStream Logo"
-              className="w-8 h-8 rounded-xl shadow-md shadow-telegram-blue/20"
-            />
-            <span className="font-bold text-white tracking-tight text-base sm:text-lg leading-none">
+          <img
+            src="/AppIcon.png"
+            alt="TeleStream Logo"
+            className="w-7 h-7 rounded-xl object-cover shadow-md shadow-[#007AFF]/20"
+          />
+          <div className="leading-tight">
+            <span className="font-bold text-[#E3E2E7] tracking-tight text-base sm:text-lg block">
               TeleStream
             </span>
-          </button>
-        </div>
-
-        {/* Center: Search Bar */}
-        <div className="flex-1 max-w-lg mx-2 hidden md:block">
-          <div className="relative">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Search videos, movies, series..."
-              value={searchQuery}
-              onChange={(e) => onSearchChange(e.target.value)}
-              className="w-full pl-10 pr-4 py-1.5 sm:py-2 bg-slate-800/60 border border-slate-700/60 rounded-xl text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-telegram-blue focus:ring-1 focus:ring-telegram-blue transition-all"
-            />
           </div>
         </div>
 
-        {/* Right: Refresh, GitHub, User Profile & Actions positioned close to the edge */}
-        <div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0">
-          {onRefresh && (
-            <button
-              type="button"
-              onClick={onRefresh}
-              disabled={isRefreshing}
-              className={`px-3 py-1.5 rounded-xl border flex items-center space-x-1.5 text-xs font-semibold transition-all shadow-md active:scale-95 cursor-pointer ${
-                isRefreshing
-                  ? 'bg-sky-500/20 border-sky-400/40 text-sky-300 cursor-wait animate-pulse'
-                  : 'bg-gradient-to-r from-telegram-blue to-sky-500 hover:from-sky-400 hover:to-blue-600 border-sky-300/30 text-white shadow-telegram-blue/30 hover:shadow-telegram-blue/50 hover:shadow-lg'
-              }`}
-              title="Sync & refresh channels & videos"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
-              <span className="font-medium tracking-wide">{isRefreshing ? 'Syncing...' : 'Refresh'}</span>
-            </button>
-          )}
-
+        {/* Right Actions: Install, Refresh, GitHub, Settings, User Profile */}
+        <div className="flex items-center space-x-2 sm:space-x-2.5 flex-shrink-0">
+          {/* Subtle Install App Button */}
           {onInstall && (
             <button
               type="button"
               onClick={onInstall}
-              className="px-2.5 sm:px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 border border-emerald-300/40 text-white flex items-center space-x-1.5 text-xs font-bold transition-all shadow-md shadow-emerald-500/25 hover:shadow-emerald-500/40 hover:scale-[1.03] active:scale-95 cursor-pointer ring-1 ring-white/20"
-              title="Install TeleStream App to your device"
+              className="p-2 rounded-xl bg-[#1E1F23] hover:bg-[#292A2E] border border-[#292A2E] text-[#8B90A0] hover:text-[#ADC6FF] transition-all cursor-pointer btn-press flex items-center space-x-1.5"
+              title="Install TeleStream App"
             >
-              <Download className="w-3.5 h-3.5 stroke-[2.5]" />
-              <span className="font-semibold tracking-tight">Install App</span>
+              <Download className="w-4 h-4" />
+              <span className="text-xs font-semibold hidden lg:inline text-[#E3E2E7]">Install</span>
             </button>
           )}
 
-          {/* GitHub Icon Link */}
+          {/* Refresh Button */}
+          {onRefresh && (
+            <button
+              type="button"
+              onClick={onRefresh}
+              className="p-2 rounded-xl bg-[#1E1F23] hover:bg-[#292A2E] border border-[#292A2E] text-[#8B90A0] hover:text-[#E3E2E7] transition-all cursor-pointer btn-press"
+              title="Refresh Chats & Videos"
+            >
+              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-[#ADC6FF]' : ''}`} />
+            </button>
+          )}
+
+          {/* GitHub Icon Link (Hidden on mobile, available in Settings) */}
           <a
             href="https://github.com/NB6RULES/TeleStream"
             target="_blank"
             rel="noopener noreferrer"
-            className="p-2 rounded-xl bg-slate-800/70 hover:bg-slate-700/70 border border-slate-700/60 text-slate-300 hover:text-white transition-all cursor-pointer"
+            className="hidden sm:flex p-2 rounded-xl bg-[#1E1F23] hover:bg-[#292A2E] border border-[#292A2E] text-[#8B90A0] hover:text-[#E3E2E7] transition-all cursor-pointer btn-press"
             title="View on GitHub"
           >
             <GithubIcon className="w-4 h-4" />
           </a>
 
+          {/* Settings Button in Header (matching iOS toolbar) */}
+          {onOpenSettings && (
+            <button
+              type="button"
+              onClick={onOpenSettings}
+              className="p-2 rounded-xl bg-[#1E1F23] hover:bg-[#292A2E] border border-[#292A2E] text-[#8B90A0] hover:text-[#ADC6FF] transition-all cursor-pointer btn-press flex items-center space-x-1.5"
+              title="Open Settings"
+            >
+              <Settings className="w-4 h-4" />
+              <span className="text-xs font-semibold hidden md:inline text-[#E3E2E7]">Settings</span>
+            </button>
+          )}
+
+          {/* User Profile Info */}
           {user && (
-            <div className="flex items-center space-x-2 sm:space-x-2.5 pl-2 border-l border-slate-800">
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-telegram-blue/20 to-sky-500/20 border border-telegram-blue/30 text-telegram-blue font-semibold text-xs flex items-center justify-center shadow-sm">
+            <div className="flex items-center space-x-2 pl-2 border-l border-[#1E1F23]">
+              <div
+                onClick={onOpenSettings}
+                className="w-8 h-8 rounded-full bg-[#1E1F23] border border-[#292A2E] text-[#ADC6FF] font-semibold text-xs flex items-center justify-center shadow-sm cursor-pointer hover:border-[#007AFF] transition-colors"
+                title={`${user.first_name} ${user.last_name || ''} - View Profile & Settings`}
+              >
                 {user.first_name ? user.first_name[0].toUpperCase() : 'U'}
               </div>
-              <div className="hidden sm:block text-left leading-tight">
-                <div className="text-xs font-semibold text-white">
+              <div
+                onClick={onOpenSettings}
+                className="hidden sm:block text-left leading-tight cursor-pointer"
+              >
+                <div className="text-xs font-semibold text-[#E3E2E7] hover:text-white transition-colors truncate max-w-[110px]">
                   {user.first_name} {user.last_name || ''}
                 </div>
-                <div className="text-[11px] text-slate-400 font-mono">
-                  {user.username ? `@${user.username}` : user.phone_number || ''}
+                <div className="text-[10px] text-[#8B90A0] truncate max-w-[110px]">
+                  {user.username ? `@${user.username}` : user.phone_number || 'Online'}
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={onLogout}
-                className="p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all cursor-pointer"
-                title="Disconnect & Clear Session"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
+              {/* Logout Button */}
+              {onLogout && (
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  className="p-1.5 rounded-lg text-[#8B90A0] hover:text-[#FFB4AB] hover:bg-[#410002]/30 transition-colors cursor-pointer"
+                  title="Log Out"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           )}
         </div>

@@ -27,8 +27,8 @@ export const FaqSection: React.FC = () => {
       answer: 'Apple limits free Apple ID developer certificates to 7 days of validity. Tools like AltStore and SideStore automate this process in the background over your local Wi-Fi network without you needing to do anything manual. If you have a paid Apple Developer Account, apps stay valid for 365 days.'
     },
     {
-      question: 'Which platform should I choose (Android vs iOS vs PC)?',
-      answer: 'For Android phones/tablets, Windows, macOS, Linux, and Smart TVs, simply click "Launch Player" — it runs instantly in your browser and can be installed to your home screen as a standalone PWA app with zero sideloading. For Apple iPhone and iPad users, we recommend sideloading the dedicated native iOS app (.IPA) to enjoy background audio and full streaming capabilities.'
+      question: 'Can I use TeleStream on any browser or device?',
+      answer: 'Yes! TeleStream Web runs in any modern browser on Windows, macOS, Linux, ChromeOS, iPadOS, iOS, and Android without needing any server setup.'
     },
     {
       question: 'Is TeleStream free and open source?',

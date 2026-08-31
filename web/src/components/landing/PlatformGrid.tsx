@@ -3,8 +3,7 @@ import {
   Globe,
   Smartphone,
   ArrowRight,
-  CheckCircle2,
-  Download
+  CheckCircle2
 } from 'lucide-react';
 
 interface PlatformGridProps {
@@ -26,46 +25,41 @@ export const PlatformGrid: React.FC<PlatformGridProps> = ({ onLaunchWeb, onScrol
             Stream on your favorite device
           </h2>
           <p className="mt-4 text-base sm:text-lg text-slate-300">
-            Enjoy instant Telegram media playback on Android, Web, Desktop, and iOS devices.
+            Enjoy instant Telegram media playback on web browsers, desktop computers, and iOS devices.
           </p>
         </div>
 
-        {/* 2 Platform Cards Grid (Web/Android & iOS) */}
+        {/* 2 Platform Cards Grid (Web & iOS) */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-          {/* Card 1: Android, Web & Desktop (Everyone except iOS) */}
+          {/* Card 1: Web & Desktop Browser */}
           <div className="bg-gradient-to-b from-slate-900/90 to-slate-950/90 border border-slate-800 rounded-3xl p-6 sm:p-8 flex flex-col justify-between hover:border-sky-500/50 transition-all duration-300 shadow-xl group">
             <div>
               <div className="flex items-center justify-between mb-6">
                 <div className="w-14 h-14 rounded-2xl bg-sky-500/10 border border-sky-500/20 text-sky-400 flex items-center justify-center group-hover:scale-110 transition-transform">
                   <Globe className="w-7 h-7" />
                 </div>
-                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-sky-500/10 text-sky-400 border border-sky-500/20 flex items-center space-x-1">
-                  <Download className="w-3 h-3" />
-                  <span>Instant Web & PWA</span>
+                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-sky-500/10 text-sky-400 border border-sky-500/20">
+                  Instant Web App
                 </span>
               </div>
 
-              <h3 className="text-2xl font-bold text-white tracking-tight mb-2">Android, Web & Desktop</h3>
+              <h3 className="text-2xl font-bold text-white tracking-tight mb-2">Web & Desktop</h3>
               <p className="text-slate-300 text-sm leading-relaxed mb-6">
-                <strong>For everyone on Android, Windows, Mac, Linux & Chromebooks.</strong> Powered by client-side Service Worker stream interception for instant playback without installing software, or 1-tap install as an App.
+                Runs directly in Google Chrome, Safari, Firefox, and Edge. Powered by client-side Service Worker stream interception for instant playback without installing software.
               </p>
 
               <ul className="space-y-2.5 text-xs sm:text-sm text-slate-300 mb-8">
                 <li className="flex items-center space-x-2.5">
                   <CheckCircle2 className="w-4 h-4 text-sky-400 flex-shrink-0" />
-                  <span><strong>Android Phones, Tablets & TVs</strong></span>
-                </li>
-                <li className="flex items-center space-x-2.5">
-                  <CheckCircle2 className="w-4 h-4 text-sky-400 flex-shrink-0" />
-                  <span><strong>PC / Mac / Linux</strong> (Chrome, Firefox, Edge, Brave)</span>
-                </li>
-                <li className="flex items-center space-x-2.5">
-                  <CheckCircle2 className="w-4 h-4 text-sky-400 flex-shrink-0" />
-                  <span><strong>1-Click PWA App Install</strong> (No sideloading needed!)</span>
+                  <span>No installation required</span>
                 </li>
                 <li className="flex items-center space-x-2.5">
                   <CheckCircle2 className="w-4 h-4 text-sky-400 flex-shrink-0" />
                   <span>Fast HTTP 206 chunk-range streaming</span>
+                </li>
+                <li className="flex items-center space-x-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-sky-400 flex-shrink-0" />
+                  <span>Works on Windows, macOS, Linux, ChromeOS & Mobile</span>
                 </li>
               </ul>
             </div>
@@ -75,7 +69,7 @@ export const PlatformGrid: React.FC<PlatformGridProps> = ({ onLaunchWeb, onScrol
               onClick={onLaunchWeb}
               className="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-bold text-sm flex items-center justify-center space-x-2 shadow-lg shadow-sky-500/20 transition-all cursor-pointer group-hover:shadow-sky-500/30"
             >
-              <span>Launch Web Player (Android & PC)</span>
+              <span>Launch Web Player</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
@@ -88,20 +82,16 @@ export const PlatformGrid: React.FC<PlatformGridProps> = ({ onLaunchWeb, onScrol
                   <Smartphone className="w-7 h-7" />
                 </div>
                 <span className="px-3 py-1 rounded-full text-xs font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                  Native iOS IPA
+                  IPA & Sideload
                 </span>
               </div>
 
               <h3 className="text-2xl font-bold text-white tracking-tight mb-2">iOS & iPadOS</h3>
               <p className="text-slate-300 text-sm leading-relaxed mb-6">
-                <strong>Specifically for iPhone and iPad users.</strong> Sideload the native Swift/Objective-C TeleStream app via AltStore, SideStore, Sideloadly, or TrollStore. No jailbreak required.
+                Native iOS app sideloadable via AltStore, SideStore, Sideloadly, or TrollStore. Direct IPA package with one-tap repository sources. No jailbreak required.
               </p>
 
               <ul className="space-y-2.5 text-xs sm:text-sm text-slate-300 mb-8">
-                <li className="flex items-center space-x-2.5">
-                  <CheckCircle2 className="w-4 h-4 text-indigo-400 flex-shrink-0" />
-                  <span><strong>Dedicated iPhone & iPad</strong> native app</span>
-                </li>
                 <li className="flex items-center space-x-2.5">
                   <CheckCircle2 className="w-4 h-4 text-indigo-400 flex-shrink-0" />
                   <span>AltStore & SideStore 1-Click Sources</span>
@@ -122,7 +112,7 @@ export const PlatformGrid: React.FC<PlatformGridProps> = ({ onLaunchWeb, onScrol
               onClick={onScrollToIos}
               className="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-sm flex items-center justify-center space-x-2 shadow-lg shadow-indigo-600/20 transition-all cursor-pointer"
             >
-              <span>Sideload for iPhone & iPad</span>
+              <span>Sideload to your iPhone</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>

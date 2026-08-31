@@ -1,35 +1,28 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Search, X } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Navbar } from './components/common/Navbar';
-import { ChatSidebar } from './components/chat/ChatSidebar';
+import { ChatSidebar, SidebarFilterMode } from './components/chat/ChatSidebar';
 import { VideoGrid } from './components/media/VideoGrid';
+import { HistoryView } from './components/history/HistoryView';
+import { SettingsView } from './components/settings/SettingsView';
 import { CustomVideoPlayer } from './components/player/CustomVideoPlayer';
 import { AuthModal } from './components/auth/AuthModal';
 import { LandingPage } from './components/landing/LandingPage';
-import { InstallModal } from './components/common/InstallModal';
+import { tdlibClient } from './services/tdlib/tdlibClient';
 import { TDLibChat, VideoItem } from './types/tdlib';
 import { AuthState } from './types/auth';
 import { StreamRangeRequest } from './types/stream';
-import { tdlibClient } from './services/tdlib/tdlibClient';
 import { registerServiceWorker, setChunkProvider } from './services/serviceWorker/registerServiceWorker';
 import { fetchVideoChunk } from './services/streaming/streamManager';
-import { useIsMobile } from './hooks/useMediaQuery';
-import { usePWAInstall } from './hooks/usePWAInstall';
+import { appSettingsStore, ContinueWatchingItem } from './services/storage/appSettingsStore';
+import { usePwaInstall } from './utils/usePwaInstall';
+import { Download, X } from 'lucide-react';
 
 export const App: React.FC = () => {
-  const isMobile = useIsMobile();
-  const { isInstallable, isIOS, showIosGuide, setShowIosGuide, triggerInstall } = usePWAInstall();
-  const touchStartXRef = useRef<number | null>(null);
-  const touchStartYRef = useRef<number | null>(null);
-
-  // Navigation State: 'landing' (default) vs 'player' (streamer platform)
   const [currentView, setCurrentView] = useState<'landing' | 'player'>(() => {
-    if (typeof window !== 'undefined') {
-      const hash = window.location.hash.toLowerCase();
-      const params = new URLSearchParams(window.location.search);
-      if (hash === '#stream' || hash === '#player' || params.get('stream') === 'true') {
-        return 'player';
-      }
+    const hash = window.location.hash.toLowerCase();
+    const params = new URLSearchParams(window.location.search);
+    if (hash === '#stream' || hash === '#player' || params.get('stream') === 'true') {
+      return 'player';
     }
     return 'landing';
   });
@@ -39,12 +32,30 @@ export const App: React.FC = () => {
   const [selectedChat, setSelectedChat] = useState<TDLibChat | null>(null);
   const [videos, setVideos] = useState<VideoItem[]>([]);
   const [activeVideo, setActiveVideo] = useState<VideoItem | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [chatSearchQuery, setChatSearchQuery] = useState('');
+  const [filterMode, setFilterMode] = useState<SidebarFilterMode>('all');
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [mobileDetailActive, setMobileDetailActive] = useState(false);
+
   const [isLoadingChats, setIsLoadingChats] = useState(false);
   const [isLoadingVideos, setIsLoadingVideos] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [currentUser, setCurrentUser] = useState(tdlibClient.getCurrentUser());
+
+  // PWA installation manager
+  const { showMobileBanner, promptInstall, dismissMobileBanner } = usePwaInstall();
+
+  // Continue Watching / Watch History Store state
+  const [continueWatching, setContinueWatching] = useState<ContinueWatchingItem[]>(() =>
+    appSettingsStore.getContinueWatching()
+  );
+
+  // Subscribe to Continue Watching updates
+  useEffect(() => {
+    const unsub = appSettingsStore.subscribe(() => {
+      setContinueWatching(appSettingsStore.getContinueWatching());
+    });
+    return () => unsub();
+  }, []);
 
   // Listen to URL hash changes for deep linking
   useEffect(() => {
@@ -53,7 +64,14 @@ export const App: React.FC = () => {
       const params = new URLSearchParams(window.location.search);
       if (hash === '#stream' || hash === '#player' || params.get('stream') === 'true') {
         setCurrentView('player');
-      } else if (hash === '' || hash === '#home' || hash.startsWith('#platforms') || hash.startsWith('#features') || hash.startsWith('#ios') || hash.startsWith('#faq')) {
+      } else if (
+        hash === '' ||
+        hash === '#home' ||
+        hash.startsWith('#platforms') ||
+        hash.startsWith('#features') ||
+        hash.startsWith('#ios') ||
+        hash.startsWith('#faq')
+      ) {
         setCurrentView('landing');
       }
     };
@@ -90,37 +108,34 @@ export const App: React.FC = () => {
     return () => unsub();
   }, []);
 
-  // Fetch chats when authenticated and entering player view
+  // Fetch Chats when user is authenticated
   const loadChats = useCallback(async () => {
     if (!authState.isAuthenticated) return;
     setIsLoadingChats(true);
     try {
       const chatList = await tdlibClient.getChats();
       setChats(chatList);
-      if (chatList.length > 0 && !selectedChat && !isMobile) {
-        setSelectedChat(chatList[0]);
+
+      // Auto-select Saved Messages or first active chat on desktop if none selected
+      if (!selectedChat && chatList.length > 0) {
+        const savedMessagesChat = chatList.find((c) => c.is_saved_messages);
+        const defaultChat = savedMessagesChat || chatList[0];
+        setSelectedChat(defaultChat);
       }
     } catch (e) {
-      console.error('[App] Failed to load chats', e);
+      console.error('[App] Failed to load Telegram chats', e);
     } finally {
       setIsLoadingChats(false);
     }
-  }, [authState.isAuthenticated, selectedChat, isMobile]);
-
-  // Keep desktop with a selected chat by default if available
-  useEffect(() => {
-    if (!isMobile && !selectedChat && chats.length > 0) {
-      setSelectedChat(chats[0]);
-    }
-  }, [isMobile, selectedChat, chats]);
+  }, [authState.isAuthenticated, selectedChat]);
 
   useEffect(() => {
-    if (currentView === 'player' && authState.isAuthenticated) {
+    if (authState.isAuthenticated) {
       loadChats();
     }
-  }, [currentView, authState.isAuthenticated, loadChats]);
+  }, [authState.isAuthenticated, loadChats]);
 
-  // Fetch videos when selected chat changes
+  // Load Videos for selected chat
   const loadVideos = useCallback(async (chat: TDLibChat) => {
     setIsLoadingVideos(true);
     try {
@@ -142,18 +157,38 @@ export const App: React.FC = () => {
 
   const handleSelectChat = (chat: TDLibChat) => {
     setSelectedChat(chat);
+    if (filterMode === 'history') {
+      setFilterMode('all');
+    }
+    // On mobile, tap to view chat files
+    setMobileDetailActive(true);
+  };
+
+  const handleFilterModeChange = (mode: SidebarFilterMode) => {
+    setFilterMode(mode);
+    if (mode === 'saved') {
+      const savedChat = chats.find(
+        (c) => c.is_saved_messages || c.title.toLowerCase().includes('saved')
+      );
+      if (savedChat) {
+        setSelectedChat(savedChat);
+        setMobileDetailActive(true);
+      }
+    } else if (mode === 'history') {
+      setMobileDetailActive(true);
+    }
   };
 
   const handleRefresh = async () => {
-    if (isRefreshing) return;
     setIsRefreshing(true);
     try {
-      await loadChats();
       if (selectedChat) {
-        await loadVideos(selectedChat);
+        await Promise.all([loadChats(), loadVideos(selectedChat)]);
+      } else {
+        await loadChats();
       }
     } finally {
-      setIsRefreshing(false);
+      setTimeout(() => setIsRefreshing(false), 500);
     }
   };
 
@@ -163,35 +198,12 @@ export const App: React.FC = () => {
     setSelectedChat(null);
     setVideos([]);
     setActiveVideo(null);
+    setIsSettingsOpen(false);
+    setMobileDetailActive(false);
   };
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (!isMobile || !selectedChat) return;
-    touchStartXRef.current = e.touches[0].clientX;
-    touchStartYRef.current = e.touches[0].clientY;
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartXRef.current === null || touchStartYRef.current === null) return;
-    const deltaX = e.changedTouches[0].clientX - touchStartXRef.current;
-    const deltaY = e.changedTouches[0].clientY - touchStartYRef.current;
-
-    // Swipe right to go back: horizontal distance > 60px and horizontally dominant
-    if (deltaX > 60 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
-      setSelectedChat(null);
-    }
-    touchStartXRef.current = null;
-    touchStartYRef.current = null;
-  };
-
-  const filteredVideos = videos.filter((v) =>
-    (v.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (v.fileName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (v.caption || '').toLowerCase().includes(searchQuery.toLowerCase())
-  );
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-sky-500 selection:text-white">
+    <div className="min-h-screen bg-[#000000] text-[#E3E2E7] flex flex-col font-sans selection:bg-[#007AFF] selection:text-white">
       {/* LANDING PAGE VIEW */}
       {currentView === 'landing' && (
         <LandingPage
@@ -201,58 +213,18 @@ export const App: React.FC = () => {
         />
       )}
 
-      {/* STREAMER PLATFORM VIEW */}
+      {/* STREAMER PLATFORM VIEW (WhatsApp Android / iOS 2-Pane Clean Layout) */}
       {currentView === 'player' && (
-        <div className="flex-1 flex flex-col h-screen overflow-hidden">
-          {/* Edge-to-Edge Navigation Bar */}
+        <div className="flex-1 flex flex-col h-screen h-[100dvh] overflow-hidden bg-[#000000] fixed inset-0">
+          {/* Edge-to-Edge Navigation Bar with Settings in Header */}
           <Navbar
             user={currentUser}
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            onLogout={handleLogout}
             onRefresh={handleRefresh}
-            onInstall={isInstallable ? triggerInstall : undefined}
             isRefreshing={isRefreshing}
-            onBackToHome={() => navigateTo('landing', '#home')}
+            onOpenSettings={() => setIsSettingsOpen(true)}
+            onLogout={handleLogout}
+            onInstall={promptInstall}
           />
-
-          {/* Mobile Search Bar below Header */}
-          {authState.isAuthenticated && (
-            <div className="md:hidden px-3 py-2 bg-slate-900/90 border-b border-slate-800/80 backdrop-blur-md flex items-center space-x-2">
-              <div className="relative flex-1">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input
-                  type="text"
-                  placeholder={selectedChat ? `Search in ${selectedChat.title}...` : 'Search chats & channels...'}
-                  value={selectedChat ? searchQuery : chatSearchQuery}
-                  onChange={(e) => {
-                    if (selectedChat) {
-                      setSearchQuery(e.target.value);
-                    } else {
-                      setChatSearchQuery(e.target.value);
-                    }
-                  }}
-                  className="w-full pl-9 pr-8 py-1.5 bg-slate-800/80 border border-slate-700/60 rounded-xl text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-telegram-blue focus:ring-1 focus:ring-telegram-blue transition-all"
-                />
-                {(selectedChat ? searchQuery : chatSearchQuery) && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (selectedChat) {
-                        setSearchQuery('');
-                      } else {
-                        setChatSearchQuery('');
-                      }
-                    }}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-0.5"
-                    aria-label="Clear search"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
 
           {/* Authentication Modal if not logged into Telegram MTProto */}
           {!authState.isAuthenticated && (
@@ -262,68 +234,116 @@ export const App: React.FC = () => {
             />
           )}
 
-          {/* Install PWA Modal / iOS Guide */}
-          <InstallModal
-            isOpen={showIosGuide}
-            onClose={() => setShowIosGuide(false)}
-            isIOS={isIOS}
-          />
-
-          {/* Main Content Area */}
+          {/* Main Content Area (WhatsApp Mobile Master-Detail + Desktop 2-Pane) */}
           {authState.isAuthenticated && (
-            <main className="flex-1 relative overflow-hidden w-full">
+            <div className="flex-1 flex w-full h-[calc(100vh-53px)] overflow-hidden">
+              {/* Chat Sidebar: Full width on mobile when !mobileDetailActive, hidden when viewing files */}
               <div
-                className={`h-full flex transition-transform duration-300 ease-out md:transition-none md:transform-none ${
-                  isMobile
-                    ? selectedChat
-                      ? '-translate-x-1/2'
-                      : 'translate-x-0'
-                    : 'w-full'
-                }`}
-                style={{
-                  width: isMobile ? '200vw' : '100%',
-                }}
+                className={`h-full ${
+                  mobileDetailActive ? 'hidden md:flex' : 'flex w-full'
+                } md:w-80 lg:w-96 flex-shrink-0`}
               >
-                {/* Chat List / Sidebar */}
-                <div className={`h-full ${isMobile ? 'w-[100vw]' : 'w-72 lg:w-80'} flex-shrink-0`}>
-                  <ChatSidebar
-                    chats={chats}
-                    selectedChatId={selectedChat ? selectedChat.id : null}
-                    onSelectChat={(chat) => {
-                      setSearchQuery('');
-                      handleSelectChat(chat);
-                    }}
-                    isLoading={isLoadingChats}
-                    searchQuery={chatSearchQuery}
-                  />
-                </div>
+                <ChatSidebar
+                  chats={chats}
+                  selectedChatId={selectedChat ? selectedChat.id : null}
+                  onSelectChat={handleSelectChat}
+                  isLoading={isLoadingChats}
+                  filterMode={filterMode}
+                  onFilterModeChange={handleFilterModeChange}
+                  historyCount={continueWatching.length}
+                />
+              </div>
 
-                {/* Video Grid View */}
-                <div
-                  className={`h-full ${isMobile ? 'w-[100vw]' : 'flex-1'} flex-shrink-0 md:flex-shrink flex flex-col`}
-                  onTouchStart={handleTouchStart}
-                  onTouchEnd={handleTouchEnd}
-                >
+              {/* Main Content Area: Hidden on mobile until a chat or history is selected */}
+              <main
+                className={`h-full flex-1 ${
+                  mobileDetailActive ? 'flex w-full' : 'hidden md:flex'
+                } overflow-hidden bg-[#000000]`}
+              >
+                {filterMode === 'history' ? (
+                  /* Watch History Screen */
+                  <HistoryView
+                    items={continueWatching}
+                    onPlayVideo={(video) => setActiveVideo(video)}
+                    onBrowseChats={() => {
+                      setFilterMode('all');
+                      setMobileDetailActive(false);
+                    }}
+                    onBack={() => {
+                      setFilterMode('all');
+                      setMobileDetailActive(false);
+                    }}
+                  />
+                ) : (
+                  /* Video Stream Grid for Selected Chat / Saved Messages */
                   <VideoGrid
-                    videos={filteredVideos}
-                    chatTitle={selectedChat ? selectedChat.title : (isMobile ? 'Select a Chat' : (chats[0]?.title || 'All Videos'))}
+                    videos={videos}
+                    chatTitle={selectedChat ? selectedChat.title : 'All Videos'}
+                    chatId={selectedChat ? selectedChat.id : null}
                     isLoading={isLoadingVideos}
                     onPlayVideo={(video) => setActiveVideo(video)}
-                    onBack={isMobile ? () => setSelectedChat(null) : undefined}
-                    searchQuery={searchQuery}
-                    onClearSearch={() => setSearchQuery('')}
+                    continueWatchingItems={continueWatching}
+                    onBack={() => setMobileDetailActive(false)}
                   />
-                </div>
-              </div>
-            </main>
+                )}
+              </main>
+            </div>
           )}
 
-          {/* Active Video Player Modal */}
+          {/* iOS Settings Sheet Modal Overlay */}
+          {isSettingsOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-3 sm:p-6 animate-in fade-in duration-200">
+              <div className="w-full max-w-2xl h-[85vh] max-h-[800px] bg-[#121317] border border-[#292A2E] rounded-3xl overflow-hidden shadow-2xl flex flex-col">
+                <SettingsView
+                  user={currentUser}
+                  onLogout={handleLogout}
+                  onClose={() => setIsSettingsOpen(false)}
+                  onInstall={promptInstall}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Active Video Player Modal (Zero-wait Virtual Streaming) */}
           {activeVideo && (
             <CustomVideoPlayer
               video={activeVideo}
               onClose={() => setActiveVideo(null)}
             />
+          )}
+
+          {/* Floating Non-intrusive Mobile PWA Install Card */}
+          {showMobileBanner && (
+            <div className="fixed bottom-4 inset-x-3 z-40 sm:hidden animate-in slide-in-from-bottom-5 duration-300">
+              <div className="p-3 rounded-2xl bg-[#16171B]/95 backdrop-blur-xl border border-[#007AFF]/40 shadow-2xl flex items-center justify-between gap-2.5">
+                <div className="flex items-center space-x-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-[#007AFF]/20 border border-[#007AFF]/40 flex items-center justify-center text-[#007AFF] flex-shrink-0">
+                    <Download className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="text-xs font-bold text-white tracking-tight truncate">Install TeleStream</h4>
+                    <p className="text-[10px] text-[#8B90A0] truncate">Add to Home Screen for fast native streaming</p>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-1.5 flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={promptInstall}
+                    className="px-3 py-1.5 rounded-xl bg-[#007AFF] hover:bg-[#0062cc] text-white font-semibold text-xs transition-all shadow-md active:scale-95 cursor-pointer"
+                  >
+                    Install
+                  </button>
+                  <button
+                    type="button"
+                    onClick={dismissMobileBanner}
+                    className="p-1.5 rounded-xl text-[#8B90A0] hover:text-white transition-colors cursor-pointer"
+                    title="Dismiss"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
         </div>
       )}

@@ -3,8 +3,8 @@ import { X, Film, Play, Loader2 } from 'lucide-react';
 import { VideoItem } from '../../types/tdlib';
 import { AspectRatio } from '../../types/stream';
 import { PlayerControls } from './PlayerControls';
-
 import { NetworkStatusOverlay } from '../debug/NetworkStatusOverlay';
+import { appSettingsStore } from '../../services/storage/appSettingsStore';
 
 interface CustomVideoPlayerProps {
   video: VideoItem;
@@ -21,7 +21,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
   // Virtual Range Stream URL intercepted by Service Worker for pure instant streaming
   const streamUrl = `/api/stream/video?fileId=${video.fileId}&size=${video.size}&mime=${encodeURIComponent(
     mimeType
-  )}&name=${encodeURIComponent(video.fileName)}`;
+  )}&name=${encodeURIComponent(video.fileName || video.title || 'video.mp4')}`;
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [isBuffering, setIsBuffering] = useState(true);
@@ -38,15 +38,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
   const [isPip, setIsPip] = useState(false);
 
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  const scheduleHideControls = useCallback(() => {
-    if (controlsTimeoutRef.current) {
-      clearTimeout(controlsTimeoutRef.current);
-    }
-    controlsTimeoutRef.current = setTimeout(() => {
-      setShowControls(false);
-    }, 3000);
-  }, []);
 
   // Video Event Handlers
   const handleTimeUpdate = () => {
@@ -74,7 +65,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
       playPromise
         .then(() => {
           setIsPlaying(true);
-          scheduleHideControls();
         })
         .catch((err) => {
           console.warn('[VideoPlayer] Autoplay blocked, attempting muted fallback:', err);
@@ -83,58 +73,30 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
             setIsMuted(true);
             videoRef.current
               .play()
-              .then(() => {
-                setIsPlaying(true);
-                scheduleHideControls();
-              })
+              .then(() => setIsPlaying(true))
               .catch(() => setIsPlaying(false));
           }
         });
     }
   };
 
+  // Save playback position on unmount / pause
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    const onEnterPip = () => setIsPip(true);
-    const onLeavePip = () => setIsPip(false);
-
-    video.addEventListener('loadedmetadata', handleLoadedMetadata);
-    video.addEventListener('timeupdate', handleTimeUpdate);
-    video.addEventListener('playing', () => { 
-      setIsPlaying(true); 
-      setIsBuffering(false); 
-      scheduleHideControls();
-    });
-    video.addEventListener('pause', () => {
-      setIsPlaying(false);
-      setShowControls(true);
-      if (controlsTimeoutRef.current) {
-        clearTimeout(controlsTimeoutRef.current);
-      }
-    });
-    video.addEventListener('waiting', () => setIsBuffering(true));
-    video.addEventListener('canplay', () => setIsBuffering(false));
-    video.addEventListener('enterpictureinpicture', onEnterPip);
-    video.addEventListener('leavepictureinpicture', onLeavePip);
-
-    scheduleHideControls();
-
     return () => {
-      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      video.removeEventListener('timeupdate', handleTimeUpdate);
-      video.removeEventListener('playing', () => setIsPlaying(true));
-      video.removeEventListener('pause', () => setIsPlaying(false));
-      video.removeEventListener('waiting', () => setIsBuffering(true));
-      video.removeEventListener('canplay', () => setIsBuffering(false));
-      video.removeEventListener('enterpictureinpicture', onEnterPip);
-      video.removeEventListener('leavepictureinpicture', onLeavePip);
-      if (controlsTimeoutRef.current) {
-        clearTimeout(controlsTimeoutRef.current);
+      if (videoRef.current && videoRef.current.currentTime > 2) {
+        appSettingsStore.savePosition({
+          fileId: video.fileId,
+          fileSize: video.size,
+          position: videoRef.current.currentTime,
+          fileName: video.fileName || video.title,
+          chatId: video.chatId,
+          chatTitle: video.chatTitle,
+          duration: videoRef.current.duration || video.duration || 0,
+          thumbnailUrl: video.thumbnailUrl,
+        });
       }
     };
-  }, [scheduleHideControls]);
+  }, [video]);
 
   const togglePlay = useCallback(() => {
     if (!videoRef.current) return;
@@ -143,7 +105,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
         .play()
         .then(() => {
           setIsPlaying(true);
-          scheduleHideControls();
         })
         .catch((err) => {
           console.warn('[VideoPlayer] Play error:', err);
@@ -151,20 +112,26 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
     } else {
       videoRef.current.pause();
       setIsPlaying(false);
-      setShowControls(true);
-      if (controlsTimeoutRef.current) {
-        clearTimeout(controlsTimeoutRef.current);
+      if (videoRef.current.currentTime > 2) {
+        appSettingsStore.savePosition({
+          fileId: video.fileId,
+          fileSize: video.size,
+          position: videoRef.current.currentTime,
+          fileName: video.fileName || video.title,
+          chatId: video.chatId,
+          chatTitle: video.chatTitle,
+          duration: videoRef.current.duration || video.duration || 0,
+          thumbnailUrl: video.thumbnailUrl,
+        });
       }
     }
-  }, [scheduleHideControls]);
+  }, [video]);
 
   const handleSeek = (time: number) => {
     if (!videoRef.current) return;
     setIsBuffering(true);
     videoRef.current.currentTime = time;
     setCurrentTime(time);
-    setShowControls(true);
-    scheduleHideControls();
   };
 
   const handleSkip = (seconds: number) => {
@@ -172,8 +139,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
     const newTime = Math.max(0, Math.min(duration, videoRef.current.currentTime + seconds));
     videoRef.current.currentTime = newTime;
     setCurrentTime(newTime);
-    setShowControls(true);
-    scheduleHideControls();
   };
 
   const handleVolumeChange = (vol: number) => {
@@ -185,8 +150,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
       videoRef.current.muted = false;
       setIsMuted(false);
     }
-    setShowControls(true);
-    scheduleHideControls();
   };
 
   const toggleMute = () => {
@@ -194,8 +157,6 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
     const nextMute = !isMuted;
     setIsMuted(nextMute);
     videoRef.current.muted = nextMute;
-    setShowControls(true);
-    scheduleHideControls();
   };
 
   const toggleFullscreen = () => {
@@ -212,8 +173,10 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
     try {
       if (document.pictureInPictureElement) {
         await document.exitPictureInPicture();
+        setIsPip(false);
       } else {
         await videoRef.current.requestPictureInPicture();
+        setIsPip(true);
       }
     } catch (err) {
       console.warn('[VideoPlayer] Picture-in-Picture failed:', err);
@@ -225,13 +188,18 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
       videoRef.current.playbackRate = rate;
     }
     setPlaybackRate(rate);
-    setShowControls(true);
-    scheduleHideControls();
   };
 
   const handleMouseMove = () => {
     setShowControls(true);
-    scheduleHideControls();
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
+    }
+    controlsTimeoutRef.current = setTimeout(() => {
+      if (isPlaying) {
+        setShowControls(false);
+      }
+    }, 3000);
   };
 
   useEffect(() => {
@@ -302,17 +270,17 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
         }`}
       >
         <div className="flex items-center space-x-3 max-w-xl truncate">
-          <div className="w-9 h-9 rounded-xl bg-telegram-blue/20 border border-telegram-blue/30 text-telegram-blue flex items-center justify-center flex-shrink-0">
+          <div className="w-9 h-9 rounded-xl bg-[#007AFF]/20 border border-[#007AFF]/30 text-[#007AFF] flex items-center justify-center flex-shrink-0">
             <Film className="w-5 h-5" />
           </div>
           <div className="truncate">
             <h3 className="font-bold text-white text-base truncate tracking-tight">
               {video.title}
             </h3>
-            <div className="flex items-center space-x-2 text-xs text-slate-400 font-mono">
+            <div className="flex items-center space-x-2 text-xs text-[#8B90A0] font-mono">
               <span>{video.chatTitle}</span>
               <span>•</span>
-              <span className="uppercase text-telegram-blue font-semibold">{video.format}</span>
+              <span className="uppercase text-[#007AFF] font-semibold">{video.format}</span>
               <span>•</span>
               <span>{(video.size / (1024 * 1024)).toFixed(1)} MB</span>
             </div>
@@ -323,7 +291,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
           <button
             type="button"
             onClick={onClose}
-            className="p-2.5 rounded-full bg-slate-900/80 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white transition-all cursor-pointer shadow-lg"
+            className="p-2.5 rounded-full bg-[#121317]/90 hover:bg-[#1E1F23] border border-[#292A2E] text-[#8B90A0] hover:text-white transition-all cursor-pointer shadow-lg"
             title="Close Player (Esc)"
           >
             <X className="w-5 h-5" />
@@ -359,7 +327,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
         {/* Live Buffering Indicator */}
         {isBuffering && (
           <div className="absolute flex flex-col items-center justify-center space-y-2.5 p-5 rounded-2xl bg-black/80 backdrop-blur-md border border-white/10 text-white pointer-events-none shadow-2xl">
-            <Loader2 className="w-9 h-9 text-telegram-blue animate-spin" />
+            <Loader2 className="w-9 h-9 text-[#007AFF] animate-spin" />
             <span className="text-xs font-mono text-slate-300">Live Streaming from Telegram...</span>
           </div>
         )}
@@ -371,7 +339,7 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
               e.stopPropagation();
               togglePlay();
             }}
-            className="absolute w-20 h-20 rounded-full bg-telegram-blue/90 hover:bg-telegram-blue hover:scale-110 active:scale-95 border border-white/30 flex items-center justify-center text-white shadow-2xl transition-all cursor-pointer"
+            className="absolute w-20 h-20 rounded-full bg-[#007AFF]/90 hover:bg-[#007AFF] hover:scale-110 active:scale-95 border border-white/30 flex items-center justify-center text-white shadow-2xl transition-all cursor-pointer"
           >
             <Play className="w-9 h-9 text-white fill-white ml-1" />
           </div>
