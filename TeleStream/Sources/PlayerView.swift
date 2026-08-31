@@ -1519,46 +1519,22 @@ class GestureCoordinator: NSObject, UIGestureRecognizerDelegate {
     }
 }
 
-// Custom KSPlayer subclass to hook into player state transitions and suppress all built-in UI
+// Custom KSPlayer subclass to hook into player state transitions and suppress stock controls
 final class CustomKSPlayerView: IOSVideoPlayerView {
     var onStateChange: ((KSPlayerState) -> Void)?
 
-    override func didAddSubview(_ subview: UIView) {
-        super.didAddSubview(subview)
-        hideInternalView(subview)
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        hideAllInternalUI()
-    }
-
     override func player(layer: KSPlayerLayer, state: KSPlayerState) {
         super.player(layer: layer, state: state)
-        hideAllInternalUI()
+        suppressStockControls()
         onStateChange?(state)
     }
 
     override func updateUI(isLandscape: Bool) {
         super.updateUI(isLandscape: isLandscape)
-        hideAllInternalUI()
+        suppressStockControls()
     }
 
-    private func hideInternalView(_ view: UIView) {
-        if view != self {
-            view.isHidden = true
-            view.alpha = 0
-            view.isUserInteractionEnabled = false
-            for g in view.gestureRecognizers ?? [] {
-                g.isEnabled = false
-            }
-            for sub in view.subviews {
-                hideInternalView(sub)
-            }
-        }
-    }
-
-    func hideAllInternalUI() {
+    func suppressStockControls() {
         toolBar.isHidden = true
         toolBar.alpha = 0
         toolBar.isUserInteractionEnabled = false
@@ -1568,10 +1544,6 @@ final class CustomKSPlayerView: IOSVideoPlayerView {
         replayButton.isHidden = true
         replayButton.alpha = 0
         replayButton.isUserInteractionEnabled = false
-
-        subviews.forEach { view in
-            hideInternalView(view)
-        }
     }
 }
 
@@ -1589,7 +1561,7 @@ struct KSVideoPlayerSurfaceView: UIViewRepresentable {
         KSOptions.isSeekedAutoPlay = true
 
         let playerView = CustomKSPlayerView()
-        playerView.hideAllInternalUI()
+        playerView.suppressStockControls()
         playerView.backgroundColor = .black
         playerView.contentMode = (viewModel.videoGravity == .resizeAspect) ? .scaleAspectFit : .scaleAspectFill
 
@@ -1604,7 +1576,7 @@ struct KSVideoPlayerSurfaceView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: CustomKSPlayerView, context: Context) {
-        uiView.hideAllInternalUI()
+        uiView.suppressStockControls()
         UIView.animate(withDuration: 0.25) {
             uiView.contentMode = (viewModel.videoGravity == .resizeAspect) ? .scaleAspectFit : .scaleAspectFill
         }
