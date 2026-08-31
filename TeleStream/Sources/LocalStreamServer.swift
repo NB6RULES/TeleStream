@@ -368,9 +368,19 @@ final class LocalStreamServer: @unchecked Sendable {
             return Int(min(Int64(length), prefix - offset))
         }
         let chunkStart = Int64(file.local.downloadOffset)
-        let chunkEnd = chunkStart + prefix
-        if prefix > 0 && offset >= chunkStart && offset < chunkEnd {
-            return Int(min(Int64(length), chunkEnd - offset))
+        if prefix > 0 && offset >= chunkStart && offset < (chunkStart + prefix) {
+            return Int(min(Int64(length), (chunkStart + prefix) - offset))
+        }
+        // Fallback: Check if file on disk has readable data at this offset
+        if !file.local.path.isEmpty, let fileHandle = FileHandle(forReadingAtPath: file.local.path) {
+            defer { try? fileHandle.close() }
+            do {
+                try fileHandle.seek(toOffset: UInt64(offset))
+                let testData = fileHandle.readData(ofLength: length)
+                if !testData.isEmpty {
+                    return testData.count
+                }
+            } catch {}
         }
         return 0
     }

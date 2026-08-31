@@ -876,6 +876,7 @@ class PlayerViewModel: ObservableObject {
     private var previousFileId: Int?
     private var nextFileId: Int?
     private var lastSaveTime: Double = 0
+    private var hasRestoredPosition = false
 
     var scrubberProgress: Double {
         guard totalDuration > 0 else { return 0 }
@@ -886,6 +887,7 @@ class PlayerViewModel: ObservableObject {
         self.isMKV = isMKV
         self.isLoading = true
         self.error = nil
+        self.hasRestoredPosition = false
         self.currentFileId = fileId
         self.currentFileName = fileName
         self.currentFileSize = fileSize
@@ -914,6 +916,7 @@ class PlayerViewModel: ObservableObject {
                     switch item.status {
                     case .readyToPlay:
                         self.isLoading = false
+                        self.error = nil
                         let dur = item.duration.seconds
                         if dur.isFinite && dur > 0 {
                             self.totalDuration = dur
@@ -921,7 +924,10 @@ class PlayerViewModel: ObservableObject {
                         }
                         self.loadAVSubtitles(for: item)
                         self.loadAVAudioTracks(for: item)
-                        self.restorePosition()
+                        if !self.hasRestoredPosition {
+                            self.hasRestoredPosition = true
+                            self.restorePosition()
+                        }
                         self.player.playImmediately(atRate: self.playbackRate)
                         self.isPlaying = true
                         self.resetControlsTimer()
@@ -941,6 +947,7 @@ class PlayerViewModel: ObservableObject {
                     case .playing:
                         self.isPlaying = true
                         self.isLoading = false
+                        self.error = nil
                     case .paused:
                         self.isPlaying = false
                     case .waitingToPlayAtSpecifiedRate:
@@ -986,16 +993,25 @@ class PlayerViewModel: ObservableObject {
                 switch state {
                 case .readyToPlay:
                     self.isLoading = false
+                    self.error = nil
                     self.isPlaying = true
                     self.loadKSTracks()
-                    self.restorePosition()
+                    if !self.hasRestoredPosition {
+                        self.hasRestoredPosition = true
+                        self.restorePosition()
+                    }
                     self.resetControlsTimer()
                 case .buffering:
                     self.isLoading = true
+                    if self.isPlaying {
+                        self.error = nil
+                    }
                 case .bufferFinished:
                     self.isLoading = false
+                    self.error = nil
                     if self.isPlaying {
                         self.ksPlayerView?.playerLayer?.player.play()
+                        self.ksPlayerView?.playerLayer?.player.playbackRate = self.playbackRate
                     }
                 case .playedToTheEnd:
                     self.isPlaying = false
@@ -1003,8 +1019,10 @@ class PlayerViewModel: ObservableObject {
                         self.startAutoNextCountdown()
                     }
                 case .error:
-                    self.isLoading = false
-                    self.error = "Cannot open video"
+                    if !self.hasRestoredPosition || !self.isPlaying {
+                        self.isLoading = false
+                        self.error = "Cannot open video"
+                    }
                 default:
                     break
                 }
