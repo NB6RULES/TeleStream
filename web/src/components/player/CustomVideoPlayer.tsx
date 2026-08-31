@@ -5,6 +5,8 @@ import { AspectRatio } from '../../types/stream';
 import { PlayerControls } from './PlayerControls';
 import { NetworkStatusOverlay } from '../debug/NetworkStatusOverlay';
 import { appSettingsStore } from '../../services/storage/appSettingsStore';
+import { AudioCodecDetector } from '../../utils/audioCodecDetector';
+import { CodecWarningModal } from './CodecWarningModal';
 
 interface CustomVideoPlayerProps {
   video: VideoItem;
@@ -17,6 +19,14 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
 
   const isMkv = video.format === 'mkv' || (video.fileName || '').toLowerCase().endsWith('.mkv');
   const mimeType = isMkv ? 'video/mp4' : video.mimeType || 'video/mp4';
+
+  const codecInfo = React.useMemo(() => {
+    return AudioCodecDetector.detect(video.fileName || video.title || '', video.mimeType);
+  }, [video.fileName, video.title, video.mimeType]);
+
+  const [showCodecWarning, setShowCodecWarning] = useState<boolean>(() => {
+    return codecInfo.isUnsupportedInBrowser;
+  });
 
   // Virtual Range Stream URL intercepted by Service Worker for pure instant streaming
   const streamUrl = `/api/stream/video?fileId=${video.fileId}&size=${video.size}&mime=${encodeURIComponent(
@@ -388,17 +398,15 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
         </div>
 
         <div className="flex items-center space-x-2.5">
-          {isMkv && (
-            <a
-              href={`vlc://${typeof window !== 'undefined' ? window.location.origin : ''}${streamUrl}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-3 py-1.5 rounded-full bg-[#007AFF]/20 hover:bg-[#007AFF]/30 border border-[#007AFF]/40 text-[#ADC6FF] hover:text-white text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer shadow-lg"
-              title="If audio codec is AC3/DTS and silent in browser, click to stream via VLC"
+          {codecInfo.hasUnsupportedAudio && (
+            <button
+              type="button"
+              onClick={() => setShowCodecWarning(true)}
+              className="px-3 py-1.5 rounded-full bg-[#FFB4AB]/20 hover:bg-[#FFB4AB]/30 border border-[#FFB4AB]/40 text-[#FFB4AB] text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer shadow-lg"
+              title="Click for audio format information & solutions"
             >
-              <span>VLC Audio</span>
-              <span className="text-[10px]">↗</span>
-            </a>
+              <span>{codecInfo.codecName.includes('DDP') ? '⚠️ DDP 5.1 Audio' : codecInfo.codecName.includes('AC-3') ? '⚠️ AC-3 Audio' : '⚠️ Audio Format'}</span>
+            </button>
           )}
 
           <button
@@ -512,6 +520,15 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
         onClose={() => setIsNetworkStatusOpen(false)} 
         totalSize={video.size || 0}
       />
+
+      {/* Unsupported Audio Codec Warning Modal */}
+      {showCodecWarning && (
+        <CodecWarningModal
+          info={codecInfo}
+          fileName={video.fileName || video.title || ''}
+          onClose={() => setShowCodecWarning(false)}
+        />
+      )}
     </div>
   );
 };
