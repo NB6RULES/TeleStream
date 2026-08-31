@@ -297,27 +297,46 @@ final class LocalStreamServer: @unchecked Sendable {
             let bytesToRead = Int(min(chunkSize, endOffset - currentOffset + 1))
 
             do {
-                // Request download chunk synchronously from TDLib
+                // Request download chunk from TDLib
                 let file = try await tdClient.downloadFile(
                     fileId: fileId,
                     limit: Int64(bytesToRead),
                     offset: currentOffset,
                     priority: 32,
-                    synchronous: true
+                    synchronous: false
                 )
 
-                let path = file.local.path
+                let initialDlSize = Int64(file.local.downloadedSize)
+                let available = bytesAvailable(in: file, at: currentOffset, length: bytesToRead, initialDownloadedSize: initialDlSize)
+                var downloaded = available
+                if downloaded == 0 {
+                    downloaded = await waitForBytes(
+                        broadcaster: broadcaster,
+                        at: currentOffset,
+                        length: bytesToRead,
+                        initialDownloadedSize: initialDlSize,
+                        timeout: 10.0
+                    )
+                }
+
+                if downloaded == 0 {
+                    try await Task.sleep(nanoseconds: 150_000_000)
+                    continue
+                }
+
+                let currentFile = try await tdClient.getFile(fileId: fileId)
+                let path = currentFile.local.path
                 guard !path.isEmpty, let fileHandle = FileHandle(forReadingAtPath: path) else {
-                    try await Task.sleep(nanoseconds: 100_000_000)
+                    try await Task.sleep(nanoseconds: 150_000_000)
                     continue
                 }
 
                 try fileHandle.seek(toOffset: UInt64(currentOffset))
-                let data = fileHandle.readData(ofLength: bytesToRead)
+                let data = fileHandle.readData(ofLength: downloaded)
                 fileHandle.closeFile()
 
                 guard !data.isEmpty else {
-                    try await Task.sleep(nanoseconds: 100_000_000)
+                    try await Task.sleep(nanoseconds: 150_000_000)
                     continue
                 }
 
@@ -345,6 +364,47 @@ final class LocalStreamServer: @unchecked Sendable {
         }
 
         closeConnection(connectionId)
+    }
+
+    private func bytesAvailable(in file: TDLibKit.File, at offset: Int64, length: Int, initialDownloadedSize: Int64? = nil) -> Int {
+        if file.local.isDownloadingCompleted {
+            return length
+        }
+        let prefix = Int64(file.local.downloadedPrefixSize)
+        if prefix > 0 && offset < prefix {
+            return Int(min(Int64(length), prefix - offset))
+        }
+        let dlOffset = Int64(file.local.downloadOffset)
+        if dlOffset > offset {
+            return Int(min(Int64(length), dlOffset - offset))
+        }
+        if let initial = initialDownloadedSize {
+            let totalDl = Int64(file.local.downloadedSize)
+            if totalDl > initial {
+                return Int(min(Int64(length), totalDl - initial))
+            }
+        }
+        return 0
+    }
+
+    private func waitForBytes(
+        broadcaster: FileUpdateBroadcaster,
+        at offset: Int64,
+        length: Int,
+        initialDownloadedSize: Int64,
+        timeout: Double
+    ) async -> Int {
+        let stream = broadcaster.subscribe()
+        let deadline = ContinuousClock.now + .seconds(timeout)
+
+        for await file in stream {
+            if ContinuousClock.now >= deadline { break }
+            let avail = bytesAvailable(in: file, at: offset, length: length, initialDownloadedSize: initialDownloadedSize)
+            if avail > 0 {
+                return avail
+            }
+        }
+        return 0
     }
 
     private func sendResponse(connection: NWConnection, header: String, body: Data?, completion: @escaping () -> Void) {

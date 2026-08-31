@@ -1523,6 +1523,16 @@ class GestureCoordinator: NSObject, UIGestureRecognizerDelegate {
 final class CustomKSPlayerView: IOSVideoPlayerView {
     var onStateChange: ((KSPlayerState) -> Void)?
 
+    override func didMoveToSuperview() {
+        super.didMoveToSuperview()
+        suppressStockControls()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        suppressStockControls()
+    }
+
     override func player(layer: KSPlayerLayer, state: KSPlayerState) {
         super.player(layer: layer, state: state)
         suppressStockControls()
