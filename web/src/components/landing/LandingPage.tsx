@@ -45,7 +45,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           >
             <img
-              src="/AppIcon.png"
+              src={`${import.meta.env.BASE_URL}AppIcon.png`}
               alt="TeleStream Logo"
               className="w-9 h-9 rounded-xl shadow-md shadow-sky-500/20"
             />

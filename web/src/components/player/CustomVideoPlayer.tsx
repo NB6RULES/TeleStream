@@ -98,6 +98,23 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
     };
   }, [video]);
 
+  // Picture-in-Picture event sync
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const onEnterPip = () => setIsPip(true);
+    const onLeavePip = () => setIsPip(false);
+
+    video.addEventListener('enterpictureinpicture', onEnterPip);
+    video.addEventListener('leavepictureinpicture', onLeavePip);
+
+    return () => {
+      video.removeEventListener('enterpictureinpicture', onEnterPip);
+      video.removeEventListener('leavepictureinpicture', onLeavePip);
+    };
+  }, []);
+
   const togglePlay = useCallback(() => {
     if (!videoRef.current) return;
     if (videoRef.current.paused) {
@@ -319,6 +336,8 @@ export const CustomVideoPlayer: React.FC<CustomVideoPlayerProps> = ({ video, onC
           }}
           onPlay={() => setIsPlaying(true)}
           onPause={() => setIsPlaying(false)}
+          onEnterPictureInPicture={() => setIsPip(true)}
+          onLeavePictureInPicture={() => setIsPip(false)}
           onError={() => {
             console.log('[VideoPlayer] Stream buffering from Telegram MTProto');
           }}

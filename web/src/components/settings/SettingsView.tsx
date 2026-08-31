@@ -295,7 +295,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ user, onLogout, onCl
         {/* SECTION 6: ABOUT */}
         <div className="flex flex-col items-center justify-center pt-4 space-y-3 select-none text-center">
           <img
-            src="/AppIcon.png"
+            src={`${import.meta.env.BASE_URL}AppIcon.png`}
             alt="TeleStream"
             className="w-14 h-14 rounded-2xl object-cover shadow-xl shadow-[#007AFF]/20"
           />
