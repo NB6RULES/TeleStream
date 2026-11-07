@@ -5,7 +5,6 @@ struct HistoryView: View {
     @EnvironmentObject var client: TelegramClient
     @State private var searchText = ""
     @State private var showClearConfirm = false
-    @State private var selectedPlayerItem: ActivePlayerItem? = nil
 
     private var filteredItems: [ContinueWatchingItem] {
         if searchText.isEmpty {
@@ -64,10 +63,7 @@ struct HistoryView: View {
                                 LazyVStack(spacing: 12) {
                                     ForEach(filteredItems) { item in
                                         Button(action: {
-                                            selectedPlayerItem = ActivePlayerItem(
-                                                media: item.media,
-                                                chatTitle: item.chatTitle
-                                            )
+                                            PlayerPresenter.shared.play(item.media, chatTitle: item.chatTitle)
                                         }) {
                                             HistoryCard(item: item) {
                                                 withAnimation {
@@ -123,13 +119,6 @@ struct HistoryView: View {
         }
         .navigationViewStyle(StackNavigationViewStyle())
         .preferredColorScheme(.dark)
-        .fullScreenCover(item: $selectedPlayerItem) { item in
-            PlayerView(
-                media: item.media,
-                chatTitle: item.chatTitle,
-                allVideos: item.allVideos
-            )
-        }
     }
 
     private var emptyStateView: some View {

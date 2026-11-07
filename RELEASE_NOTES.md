@@ -1,10 +1,5 @@
-- Fixed: videos from History/Recents not playing after the app was force-closed (no more clearing history to make playback work)
-- Fixed: pinch-to-zoom / fill-screen not working on MKV, AVI, WebM and TS videos
-- Fixed: pinch gesture often swallowed by the volume/brightness swipe
-- Fixed: next/previous episode not switching the video for MKV files (and when switching between MKV and MP4)
-- Fixed: stream server could send empty data after a restart, causing endless buffering
-- Fixed: stream server staying dead after the app was in the background
-- Fixed: "Clear Video Cache" leaving Telegram's file database out of sync and breaking playback
-- Fixed: wrong or missing thumbnails in History/Recents after a restart
-- "Max cached videos" and "Download whole video first" settings now actually work
-- Old history entries are automatically repaired and keep their watch progress
+- Fixed: player looping between "Locating Video" and "Buffering" when resuming after a force-close
+- Fixed: extra progress bar from the built-in MKV player that never went away
+- New playback speed panel: clean preset grid plus fine-tune -/+ (0.05x steps)
+- Smoother audio at 0.25x-3x speeds, and the chosen speed now sticks after pause/seek
+- Bigger buffer for MKV/AVI/WebM so faster speeds don't stutter

@@ -17,6 +17,20 @@ struct ActivePlayerItem: Identifiable, Equatable {
     }
 }
 
+/// Presents the player from ONE stable place (MainTabView). Presenting it from inside
+/// List / LazyVStack rows meant every history save re-rendered the row, recreated the
+/// player and restarted loading ("Locating Video" <-> "Buffering" loop).
+@MainActor
+final class PlayerPresenter: ObservableObject {
+    static let shared = PlayerPresenter()
+    @Published var item: ActivePlayerItem?
+
+    func play(_ media: PlayableMedia, chatTitle: String, allVideos: [PlayableMedia] = []) {
+        guard item == nil else { return }
+        item = ActivePlayerItem(media: media, chatTitle: chatTitle, allVideos: allVideos)
+    }
+}
+
 struct MediaOptionItem: Identifiable, Equatable {
     let id: String
     let name: String
@@ -339,6 +353,21 @@ struct PlayerView: View {
                     autoNextOverlay
                         .transition(.scale.combined(with: .opacity))
                 }
+
+                // 8. Playback speed panel (own layer so the controls' auto-hide can't yank it away)
+                if showSpeedSelector {
+                    ZStack {
+                        Color.black.opacity(0.45)
+                            .ignoresSafeArea()
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                withAnimation(.easeIn(duration: 0.18)) { showSpeedSelector = false }
+                            }
+                        speedPanel(maxWidth: min(geometry.size.width - 32, 380))
+                    }
+                    .transition(.opacity)
+                    .zIndex(10)
+                }
             }
         }
         .toolbar(.hidden, for: .tabBar)
@@ -505,10 +534,10 @@ struct PlayerView: View {
 
                     // Speed Selector Button (0.25x to 3.0x)
                     Button(action: {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            showSpeedSelector.toggle()
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            showSpeedSelector = true
+                            viewModel.showControls = false
                         }
-                        viewModel.resetControlsTimer()
                     }) {
                         HStack(spacing: 4) {
                             Image(systemName: "speedometer")
@@ -542,94 +571,6 @@ struct PlayerView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 52)
-
-                // Centered Speed Selector Overlay (strictly horizontal scroll, locked against vertical sliding/bouncing)
-                if showSpeedSelector {
-                    HStack {
-                        Spacer()
-                        HStack(spacing: 8) {
-                            Image(systemName: "speedometer")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundColor(Color(hex: "ADC6FF"))
-                                .padding(.leading, 12)
-
-                            ScrollViewReader { proxy in
-                                ScrollView(.horizontal, showsIndicators: false) {
-                                    HStack(spacing: 6) {
-                                        ForEach(viewModel.availableRates, id: \.self) { rate in
-                                            Button(action: {
-                                                withAnimation(.easeInOut(duration: 0.15)) {
-                                                    viewModel.setPlaybackRate(rate)
-                                                }
-                                                viewModel.resetControlsTimer()
-                                            }) {
-                                                HStack(spacing: 3) {
-                                                    if abs(viewModel.playbackRate - rate) < 0.01 {
-                                                        Image(systemName: "checkmark")
-                                                            .font(.system(size: 9, weight: .bold))
-                                                    }
-                                                    Text(formatRate(rate))
-                                                        .font(.system(size: 12, weight: .bold))
-                                                }
-                                                .foregroundColor(abs(viewModel.playbackRate - rate) < 0.01 ? .white : Color(hex: "E3E2E7"))
-                                                .padding(.horizontal, 10)
-                                                .frame(height: 28)
-                                                .background(
-                                                    abs(viewModel.playbackRate - rate) < 0.01 ?
-                                                    Color(hex: "007AFF") :
-                                                    Color.white.opacity(0.12)
-                                                )
-                                                .clipShape(Capsule())
-                                            }
-                                            .buttonStyle(.plain)
-                                            .id(rate)
-                                        }
-                                    }
-                                    .padding(.horizontal, 4)
-                                    .frame(height: 32)
-                                }
-                                .frame(height: 32)
-                                .background(StrictHorizontalScrollViewConfigurator())
-                                .onAppear {
-                                    proxy.scrollTo(viewModel.playbackRate, anchor: .center)
-                                }
-                                .onChange(of: viewModel.playbackRate) { newRate in
-                                    withAnimation {
-                                        proxy.scrollTo(newRate, anchor: .center)
-                                    }
-                                }
-                            }
-
-                            Button(action: {
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    showSpeedSelector = false
-                                }
-                            }) {
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.system(size: 18))
-                                    .foregroundColor(Color(hex: "8B90A0"))
-                                    .padding(.trailing, 10)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        .padding(.vertical, 4)
-                        .frame(height: 44)
-                        .frame(maxWidth: min(screenWidth - 32, 540))
-                        .background(
-                            Capsule()
-                                .fill(Color.black.opacity(0.92))
-                                .overlay(
-                                    Capsule()
-                                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                                )
-                        )
-                        .shadow(color: Color.black.opacity(0.6), radius: 10)
-                        Spacer()
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 8)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-                }
 
                 Spacer()
 
@@ -784,12 +725,92 @@ struct PlayerView: View {
         .padding(.bottom, 100)
     }
 
-    private func formatRate(_ rate: Float) -> String {
-        if rate == Float(Int(rate)) {
-            return String(format: "%.0fx", rate)
-        } else {
-            return String(format: "%.2fx", rate).replacingOccurrences(of: "0x", with: "x")
+    private func speedPanel(maxWidth: CGFloat) -> some View {
+        VStack(spacing: 16) {
+            HStack {
+                Label("Playback Speed", systemImage: "speedometer")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(Color(hex: "E3E2E7"))
+                Spacer()
+                Button(action: {
+                    withAnimation(.easeIn(duration: 0.18)) { showSpeedSelector = false }
+                }) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(Color(hex: "C1C6D7"))
+                        .frame(width: 30, height: 30)
+                        .background(Color.white.opacity(0.1))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+            }
+
+            // Current value with fine-tune steps
+            HStack(spacing: 18) {
+                speedStepButton(systemName: "minus", delta: -0.05)
+                Text(formatRate(viewModel.playbackRate))
+                    .font(.system(size: 34, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundColor(.white)
+                    .frame(minWidth: 110)
+                speedStepButton(systemName: "plus", delta: 0.05)
+            }
+
+            // Presets
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 5), spacing: 8) {
+                ForEach(viewModel.availableRates, id: \.self) { rate in
+                    let selected = abs(viewModel.playbackRate - rate) < 0.001
+                    Button(action: { viewModel.setPlaybackRate(rate) }) {
+                        Text(formatRate(rate))
+                            .font(.system(size: 13, weight: .semibold))
+                            .monospacedDigit()
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                            .foregroundColor(selected ? .white : Color(hex: "E3E2E7"))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 36)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(selected ? Color(hex: "007AFF") : Color.white.opacity(0.08))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
         }
+        .padding(18)
+        .frame(maxWidth: maxWidth)
+        .background(
+            RoundedRectangle(cornerRadius: 22)
+                .fill(Color(hex: "17181C").opacity(0.97))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 22)
+                        .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                )
+        )
+        .shadow(color: Color.black.opacity(0.5), radius: 20)
+    }
+
+    private func speedStepButton(systemName: String, delta: Float) -> some View {
+        let next = ((viewModel.playbackRate + delta) * 100).rounded() / 100
+        let enabled = next >= 0.25 - 0.001 && next <= 3.0 + 0.001
+        return Button(action: { if enabled { viewModel.setPlaybackRate(next) } }) {
+            Image(systemName: systemName)
+                .font(.system(size: 16, weight: .bold))
+                .foregroundColor(enabled ? .white : .white.opacity(0.3))
+                .frame(width: 44, height: 44)
+                .background(Color.white.opacity(0.1))
+                .clipShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+    }
+
+    private func formatRate(_ rate: Float) -> String {
+        var text = String(format: "%.2f", rate)
+        while text.hasSuffix("0") { text.removeLast() }
+        if text.hasSuffix(".") { text.removeLast() }
+        return text + "x"
     }
 
     private func formatTime(_ seconds: Int) -> String {
@@ -966,6 +987,8 @@ class PlayerViewModel: ObservableObject {
         let asset = AVURLAsset(url: url)
         let playerItem = AVPlayerItem(asset: asset)
         playerItem.preferredForwardBufferDuration = 30
+        // The iOS default pitch algorithm sounds robotic/choppy at non-1x speeds.
+        playerItem.audioTimePitchAlgorithm = .spectral
 
         statusObserver = playerItem.observe(\.status) { [weak self] item, _ in
             Task { @MainActor [weak self] in
@@ -1015,6 +1038,7 @@ class PlayerViewModel: ObservableObject {
             }
         }
 
+        player.defaultRate = playbackRate
         player.replaceCurrentItem(with: playerItem)
         setupAVPositionTracking()
         setupAVEndObserver(for: playerItem)
@@ -1067,9 +1091,11 @@ class PlayerViewModel: ObservableObject {
                 case .bufferFinished:
                     self.isLoading = false
                     self.error = nil
-                    if self.isPlaying {
-                        self.ksPlayerView?.playerLayer?.player.play()
-                        self.ksPlayerView?.playerLayer?.player.playbackRate = self.playbackRate
+                    if self.isPlaying, let ksPlayer = self.ksPlayerView?.playerLayer?.player {
+                        ksPlayer.play()
+                        if abs(ksPlayer.playbackRate - self.playbackRate) > 0.001 {
+                            ksPlayer.playbackRate = self.playbackRate
+                        }
                     }
                 case .playedToTheEnd:
                     self.isPlaying = false
@@ -1089,7 +1115,11 @@ class PlayerViewModel: ObservableObject {
 
         KSOptions.isAutoPlay = true
         KSOptions.isSeekedAutoPlay = true
-        let resource = KSPlayerResource(url: url, options: KSOptions(), name: title)
+        let options = KSOptions()
+        // Larger buffer so faster playback speeds don't constantly run dry and stutter.
+        options.preferredForwardBufferDuration = 6
+        options.maxBufferDuration = 60
+        let resource = KSPlayerResource(url: url, options: options, name: title)
         playerView.set(resource: resource)
     }
 
@@ -1136,15 +1166,20 @@ class PlayerViewModel: ObservableObject {
     }
 
     func setPlaybackRate(_ rate: Float) {
-        playbackRate = rate
-        if isPlaying {
-            if isMKV {
-                ksPlayerView?.playerLayer?.player.playbackRate = rate
-            } else {
-                player.rate = rate
+        let clamped = min(max(rate, 0.25), 3.0)
+        guard abs(clamped - playbackRate) > 0.0001 else { return }
+        playbackRate = clamped
+        if isMKV {
+            if isPlaying {
+                ksPlayerView?.playerLayer?.player.playbackRate = clamped
+            }
+        } else {
+            // defaultRate makes play()/resume keep the chosen speed (iOS 16+).
+            player.defaultRate = clamped
+            if isPlaying {
+                player.rate = clamped
             }
         }
-        resetControlsTimer()
     }
 
     func toggleAspect() {
@@ -1651,6 +1686,15 @@ final class CustomKSPlayerView: IOSVideoPlayerView {
     }
 
     func suppressStockControls() {
+        // KSPlayer moves toolBar.timeSlider into bottomMaskView in some layouts, which is
+        // why a second progress bar stayed on screen. Hide the entire controller layer
+        // (subtitles live outside it and keep working).
+        controllerView.isHidden = true
+        controllerView.alpha = 0
+        controllerView.isUserInteractionEnabled = false
+        toolBar.timeSlider.isHidden = true
+        loadingIndector.isHidden = true
+        seekToView.isHidden = true
         toolBar.isHidden = true
         toolBar.alpha = 0
         toolBar.isUserInteractionEnabled = false
@@ -1727,40 +1771,3 @@ class PlayerUIView: UIView {
     override class var layerClass: AnyClass { AVPlayerLayer.self }
     var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
 }
-
-// Helper to strictly lock ScrollView to horizontal only, eliminating any vertical scrolling, bouncing, or sliding
-struct StrictHorizontalScrollViewConfigurator: UIViewRepresentable {
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView()
-        view.backgroundColor = .clear
-        view.isUserInteractionEnabled = false
-        DispatchQueue.main.async {
-            self.lockHorizontal(view: view)
-        }
-        return view
-    }
-
-    func updateUIView(_ uiView: UIView, context: Context) {
-        DispatchQueue.main.async {
-            self.lockHorizontal(view: uiView)
-        }
-    }
-
-    private func lockHorizontal(view: UIView) {
-        var current: UIView? = view
-        while let v = current {
-            if let scrollView = v as? UIScrollView {
-                scrollView.alwaysBounceVertical = false
-                scrollView.alwaysBounceHorizontal = true
-                scrollView.showsVerticalScrollIndicator = false
-                scrollView.isDirectionalLockEnabled = true
-                if scrollView.contentOffset.y != 0 {
-                    scrollView.contentOffset.y = 0
-                }
-                break
-            }
-            current = v.superview
-        }
-    }
-}
-
