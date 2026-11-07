@@ -10,7 +10,9 @@ packages:
     branch: main
   KSPlayer:
     url: https://github.com/kingslay/KSPlayer.git
-    branch: main
+    # Pinned: KSPlayer main now requires Swift tools 6.2 (Xcode 26), which the
+    # macos-15 runner doesn't have. This is the revision that built v1.59.
+    revision: af2e26f68b5bf726463850fe19c23c08a0d56577
 
 targets:
   TeleStream:
