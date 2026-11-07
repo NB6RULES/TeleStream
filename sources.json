@@ -10,15 +10,22 @@
       "name": "TeleStream",
       "bundleIdentifier": "com.telestream.TeleStream",
       "developerName": "NB6RULES",
-      "version": "1.60",
-      "versionDate": "2026-11-07T06:56:08Z",
-      "versionDescription": "v1.60: Fixed: videos from History/Recents not playing after the app was force-closed (no more clearing history to make playback work) \u2022 Fixed: pinch-to-zoom / fill-screen not working on MKV, AVI, WebM and TS videos \u2022 Fixed: pinch gesture often swallowed by the volume/brightness swipe \u2022 Fixed: next/previous episode not switching the video for MKV files (and when switching between MKV and MP4) \u2022 Fixed: stream server could send empty data after a restart, causing endless buffering \u2022 Fixed: stream server staying dead after the app was in the background \u2022 Fixed: \"Clear Video Cache\" leaving Telegram's file database out of sync and breaking playback \u2022 Fixed: wrong or missing thumbnails in History/Recents after a restart \u2022 \"Max cached videos\" and \"Download whole video first\" settings now actually work \u2022 Old history entries are automatically repaired and keep their watch progress",
+      "version": "1.61",
+      "versionDate": "2026-11-07T07:25:54Z",
+      "versionDescription": "v1.61: Fixed: player looping between \"Locating Video\" and \"Buffering\" when resuming after a force-close \u2022 Fixed: extra progress bar from the built-in MKV player that never went away \u2022 New playback speed panel: clean preset grid plus fine-tune -/+ (0.05x steps) \u2022 Smoother audio at 0.25x-3x speeds, and the chosen speed now sticks after pause/seek \u2022 Bigger buffer for MKV/AVI/WebM so faster speeds don't stutter",
       "downloadURL": "https://github.com/NB6RULES/TeleStream/releases/latest/download/TeleStream.ipa",
       "iconURL": "https://raw.githubusercontent.com/NB6RULES/TeleStream/main/TeleStream/Sources/Assets.xcassets/TeleStreamLogo.imageset/logo.png",
       "localizedDescription": "TeleStream is a fast and native iOS streaming player powered by TDLibKit to stream and play media from your Telegram chats, channels, and cloud storage.",
       "tintColor": "#0088CC",
-      "size": 52673794,
+      "size": 52662037,
       "versions": [
+        {
+          "version": "1.61",
+          "date": "2026-11-07T07:25:54Z",
+          "size": 52662037,
+          "downloadURL": "https://github.com/NB6RULES/TeleStream/releases/download/v1.61/TeleStream.ipa",
+          "localizedDescription": "v1.61: Fixed: player looping between \"Locating Video\" and \"Buffering\" when resuming after a force-close \u2022 Fixed: extra progress bar from the built-in MKV player that never went away \u2022 New playback speed panel: clean preset grid plus fine-tune -/+ (0.05x steps) \u2022 Smoother audio at 0.25x-3x speeds, and the chosen speed now sticks after pause/seek \u2022 Bigger buffer for MKV/AVI/WebM so faster speeds don't stutter"
+        },
         {
           "version": "1.60",
           "date": "2026-11-07T06:56:08Z",
@@ -81,13 +88,6 @@
           "size": 51250155,
           "downloadURL": "https://github.com/NB6RULES/TeleStream/releases/download/v1.51/TeleStream.ipa",
           "localizedDescription": "TeleStream v1.51 automated build."
-        },
-        {
-          "version": "1.50",
-          "date": "2026-08-30T16:46:15Z",
-          "size": 51242262,
-          "downloadURL": "https://github.com/NB6RULES/TeleStream/releases/download/v1.50/TeleStream.ipa",
-          "localizedDescription": "TeleStream v1.50 automated build."
         }
       ],
       "appPermissions": {
