@@ -1,5 +1,3 @@
-- Fixed: player looping between "Locating Video" and "Buffering" when resuming after a force-close
-- Fixed: extra progress bar from the built-in MKV player that never went away
-- New playback speed panel: clean preset grid plus fine-tune -/+ (0.05x steps)
-- Smoother audio at 0.25x-3x speeds, and the chosen speed now sticks after pause/seek
-- Bigger buffer for MKV/AVI/WebM so faster speeds don't stutter
+- Fixed: skipped / choppy frames when watching at faster playback speeds (MKV, AVI, WebM, TS)
+- Smoother playback on ProMotion (120 Hz) iPhones
+- Fewer background saves while watching, so the player no longer hitches every few seconds

@@ -872,6 +872,7 @@ class PlayerViewModel: ObservableObject {
     private var previousMedia: PlayableMedia?
     private var nextMedia: PlayableMedia?
     private var lastSaveTime: Double = 0
+    private var lastSaveWallTime: CFAbsoluteTime = CFAbsoluteTimeGetCurrent()
     private var hasRestoredPosition = false
     private var hasStarted = false
 
@@ -1060,10 +1061,7 @@ class PlayerViewModel: ObservableObject {
                     self.totalDuration = total
                     self.videoDuration = Int(total)
                 }
-                if abs(self.currentPosition - self.lastSaveTime) >= 5.0 {
-                    self.lastSaveTime = self.currentPosition
-                    self.savePosition()
-                }
+                self.savePositionIfDue()
             }
         }
 
@@ -1375,6 +1373,16 @@ class PlayerViewModel: ObservableObject {
         }
     }
 
+    /// Save at most every 10 real seconds. Each save rewrites history and refreshes the
+    /// screens behind the player; doing it every 5s of *media* time (every ~1.7s at 3x)
+    /// stalled the main thread and caused dropped frames.
+    private func savePositionIfDue() {
+        let now = CFAbsoluteTimeGetCurrent()
+        guard now - lastSaveWallTime >= 10 else { return }
+        lastSaveWallTime = now
+        savePosition()
+    }
+
     func savePosition() {
         guard isResolved else { return }
         let currentTime = isMKV ? currentPosition : player.currentTime().seconds
@@ -1436,10 +1444,7 @@ class PlayerViewModel: ObservableObject {
                     self.videoDuration = Int(dur)
                 }
 
-                if abs(self.currentPosition - self.lastSaveTime) >= 5.0 {
-                    self.lastSaveTime = self.currentPosition
-                    self.savePosition()
-                }
+                self.savePositionIfDue()
             }
         }
     }
@@ -1716,6 +1721,10 @@ struct KSVideoPlayerSurfaceView: UIViewRepresentable {
     func makeUIView(context: Context) -> CustomKSPlayerView {
         KSOptions.firstPlayerType = KSMEPlayer.self
         KSOptions.secondPlayerType = KSMEPlayer.self
+        // By default KSPlayer locks the render loop to the video's own fps (e.g. 24 Hz).
+        // At 2x/3x that means only every 2nd/3rd frame can be drawn -> skipped frames.
+        // Let it render at the display's full refresh rate instead.
+        KSOptions.preferredFrame = false
         KSOptions.canBackgroundPlay = true
         KSOptions.isAutoPlay = true
         KSOptions.isSeekedAutoPlay = true
