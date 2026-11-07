@@ -7,18 +7,13 @@ import KSPlayer
 import MediaPlayer
 
 struct ActivePlayerItem: Identifiable, Equatable {
-    var id: Int { fileId }
-    let fileId: Int
-    let fileSize: Int64
-    let fileName: String
-    var chatId: Int64 = 0
+    let id = UUID()
+    var media: PlayableMedia
     var chatTitle: String = ""
-    var duration: Int = 0
-    var thumbnailFileId: Int? = nil
-    var allVideos: [(fileId: Int, fileName: String, fileSize: Int64)] = []
+    var allVideos: [PlayableMedia] = []
 
     static func == (lhs: ActivePlayerItem, rhs: ActivePlayerItem) -> Bool {
-        lhs.fileId == rhs.fileId
+        lhs.id == rhs.id
     }
 }
 
@@ -35,14 +30,9 @@ struct MediaOptionItem: Identifiable, Equatable {
 }
 
 struct PlayerView: View {
-    let fileId: Int
-    let fileSize: Int64
-    let fileName: String
-    var chatId: Int64 = 0
+    let media: PlayableMedia
     var chatTitle: String = ""
-    var duration: Int = 0
-    var thumbnailFileId: Int? = nil
-    var allVideos: [(fileId: Int, fileName: String, fileSize: Int64)] = []
+    var allVideos: [PlayableMedia] = []
 
     @EnvironmentObject var client: TelegramClient
     @StateObject private var viewModel = PlayerViewModel()
@@ -63,29 +53,22 @@ struct PlayerView: View {
     @State private var brightnessTimer: Timer?
     @State private var aspectTimer: Timer?
 
-    private var isMKV: Bool {
-        let ext = (fileName as NSString).pathExtension.lowercased()
-        return ext == "mkv" || ext == "avi" || ext == "webm" || ext == "flv" || ext == "wmv" || ext == "ts"
-    }
-
-    private var streamURL: URL {
-        LocalStreamServer.shared.start(with: client)
-        return LocalStreamServer.shared.streamURL(fileId: fileId, fileSize: fileSize, fileName: fileName)
-    }
-
     var body: some View {
         GeometryReader { geometry in
             ZStack {
                 Color.black.ignoresSafeArea()
 
                 // 1. Video Surface Layer (KSPlayer for MKV/non-native, AVPlayer for MP4/MOV)
-                if isMKV {
-                    KSVideoPlayerSurfaceView(
-                        url: streamURL,
-                        title: fileName,
-                        viewModel: viewModel
-                    )
-                    .ignoresSafeArea()
+                if viewModel.isMKV {
+                    if let url = viewModel.streamURL {
+                        KSVideoPlayerSurfaceView(
+                            url: url,
+                            title: viewModel.media.fileName,
+                            viewModel: viewModel
+                        )
+                        .id(url)
+                        .ignoresSafeArea()
+                    }
                 } else {
                     CustomVideoPlayerView(
                         player: viewModel.player,
@@ -99,6 +82,11 @@ struct PlayerView: View {
                     onToggleAspect: {
                         viewModel.toggleAspect()
                         triggerAspectHUD()
+                    },
+                    onPinch: { zoomIn in
+                        if viewModel.setAspect(fill: zoomIn) {
+                            triggerAspectHUD()
+                        }
                     },
                     onSeekRelative: { delta in
                         viewModel.seekRelative(seconds: delta)
@@ -132,7 +120,7 @@ struct PlayerView: View {
                         .padding(.top, 4)
 
                         VStack(spacing: 4) {
-                            Text("Buffering Stream...")
+                            Text(viewModel.streamURL == nil ? "Locating Video..." : "Buffering Stream...")
                                 .font(.system(size: 15, weight: .semibold))
                                 .foregroundColor(.white)
 
@@ -295,7 +283,7 @@ struct PlayerView: View {
                                     }
 
                                     Button(action: {
-                                        viewModel.setup(fileId: fileId, fileSize: fileSize, fileName: fileName, client: client, isMKV: isMKV)
+                                        viewModel.retry()
                                     }) {
                                         HStack(spacing: 8) {
                                             Image(systemName: "arrow.clockwise")
@@ -361,22 +349,10 @@ struct PlayerView: View {
         .persistentSystemOverlays(.hidden)
         .preferredColorScheme(.dark)
         .onAppear {
-            viewModel.chatId = chatId
-            viewModel.chatTitle = chatTitle
-            viewModel.videoDuration = duration
-            viewModel.thumbnailFileId = thumbnailFileId
-            viewModel.allVideos = allVideos
-            viewModel.setup(fileId: fileId, fileSize: fileSize, fileName: fileName, client: client, isMKV: isMKV)
-            AppSettings.shared.savePosition(
-                fileId: fileId,
-                fileSize: fileSize,
-                position: AppSettings.shared.playbackPositions[fileId] ?? 0,
-                fileName: fileName,
-                chatId: chatId,
-                chatTitle: chatTitle,
-                duration: duration,
-                thumbnailFileId: thumbnailFileId
-            )
+            viewModel.start(media: media, chatTitle: chatTitle, allVideos: allVideos, client: client)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
+            viewModel.savePosition()
         }
         .onDisappear {
             viewModel.savePosition()
@@ -462,7 +438,7 @@ struct PlayerView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(fileName)
+                        Text(viewModel.media.fileName)
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundColor(.white)
                             .lineLimit(1)
@@ -847,7 +823,9 @@ class PlayerViewModel: ObservableObject {
     @Published var showAutoNextCountdown = false
     @Published var autoNextSeconds = 5
 
-    var isMKV: Bool = false
+    @Published var isMKV: Bool = false
+    @Published var media = PlayableMedia(fileId: 0, fileSize: 0, fileName: "")
+    @Published var streamURL: URL?
 
     // AVPlayer components
     let player = AVPlayer()
@@ -862,107 +840,184 @@ class PlayerViewModel: ObservableObject {
     private var autoNextTimer: Timer?
     private var controlsTimer: Timer?
 
-    private var currentFileId: Int = 0
-    private var currentFileName: String = ""
-    private var currentFileSize: Int64 = 0
     private var currentClient: TelegramClient?
+    private var loadToken = UUID()
+    private var isResolved = false
 
-    var chatId: Int64 = 0
     var chatTitle: String = ""
     var videoDuration: Int = 0
-    var thumbnailFileId: Int? = nil
-    var allVideos: [(fileId: Int, fileName: String, fileSize: Int64)] = []
+    var allVideos: [PlayableMedia] = []
 
-    private var previousFileId: Int?
-    private var nextFileId: Int?
+    private var previousMedia: PlayableMedia?
+    private var nextMedia: PlayableMedia?
     private var lastSaveTime: Double = 0
     private var hasRestoredPosition = false
+    private var hasStarted = false
 
     var scrubberProgress: Double {
         guard totalDuration > 0 else { return 0 }
         return min(max(currentPosition / totalDuration, 0.0), 1.0)
     }
 
-    func setup(fileId: Int, fileSize: Int64, fileName: String, client: TelegramClient, isMKV: Bool) {
-        self.isMKV = isMKV
-        self.isLoading = true
-        self.error = nil
-        self.hasRestoredPosition = false
-        self.currentFileId = fileId
-        self.currentFileName = fileName
-        self.currentFileSize = fileSize
+    /// Entry point from the view. Guarded so SwiftUI re-running onAppear (e.g. after
+    /// rotation or returning from background) doesn't restart playback.
+    func start(media: PlayableMedia, chatTitle: String, allVideos: [PlayableMedia], client: TelegramClient) {
+        guard !hasStarted else { return }
+        hasStarted = true
+        self.chatTitle = chatTitle
+        self.allVideos = allVideos
         self.currentClient = client
+        load(media)
+    }
 
-        // Detect neighbors
-        let videoList = allVideos.map { (fileId: $0.fileId, fileName: $0.fileName) }
-        let neighbors = EpisodeDetector.findNeighbors(currentFileId: fileId, videos: videoList)
-        previousFileId = neighbors.prev
-        nextFileId = neighbors.next
-        hasPrevious = neighbors.prev != nil
-        hasNext = neighbors.next != nil
+    func retry() {
+        load(media)
+    }
 
-        LocalStreamServer.shared.start(with: client)
-        let streamURL = LocalStreamServer.shared.streamURL(fileId: fileId, fileSize: fileSize, fileName: fileName)
+    private func load(_ target: PlayableMedia) {
+        let token = UUID()
+        loadToken = token
+        teardownPlayback()
 
-        if isMKV {
-            // Handled via KSVideoPlayerSurfaceView & bindKSPlayer
-        } else {
-            let asset = AVURLAsset(url: streamURL)
-            let playerItem = AVPlayerItem(asset: asset)
-
-            statusObserver = playerItem.observe(\.status) { [weak self] item, _ in
-                Task { @MainActor [weak self] in
-                    guard let self else { return }
-                    switch item.status {
-                    case .readyToPlay:
-                        self.isLoading = false
-                        self.error = nil
-                        let dur = item.duration.seconds
-                        if dur.isFinite && dur > 0 {
-                            self.totalDuration = dur
-                            self.videoDuration = Int(dur)
-                        }
-                        self.loadAVSubtitles(for: item)
-                        self.loadAVAudioTracks(for: item)
-                        if !self.hasRestoredPosition {
-                            self.hasRestoredPosition = true
-                            self.restorePosition()
-                        }
-                        self.player.playImmediately(atRate: self.playbackRate)
-                        self.isPlaying = true
-                        self.resetControlsTimer()
-                    case .failed:
-                        self.isLoading = false
-                        self.error = item.error?.localizedDescription ?? "Cannot open video"
-                    default:
-                        break
-                    }
-                }
-            }
-
-            timeControlObserver = player.observe(\.timeControlStatus) { [weak self] p, _ in
-                Task { @MainActor [weak self] in
-                    guard let self else { return }
-                    switch p.timeControlStatus {
-                    case .playing:
-                        self.isPlaying = true
-                        self.isLoading = false
-                        self.error = nil
-                    case .paused:
-                        self.isPlaying = false
-                    case .waitingToPlayAtSpecifiedRate:
-                        self.isLoading = true
-                    @unknown default:
-                        break
-                    }
-                }
-            }
-
-            player.replaceCurrentItem(with: playerItem)
-            setupAVPositionTracking()
-            setupAVEndObserver(for: playerItem)
-        }
+        isLoading = true
+        error = nil
+        isPlaying = false
+        hasRestoredPosition = false
+        isResolved = false
+        currentPosition = 0
+        lastSaveTime = 0
+        totalDuration = target.duration > 0 ? Double(target.duration) : 0
+        videoDuration = target.duration
+        media = target
+        isMKV = target.isNonNativeContainer
+        streamURL = nil
+        audioTrackOptions = []
+        subtitleOptions = []
+        selectedSubtitleId = "off"
+        selectedAudioTrackId = "default"
+        updateNeighbors()
         resetControlsTimer()
+
+        guard let client = currentClient else { return }
+
+        Task { @MainActor [weak self] in
+            // Re-locate the file: ids saved before an app restart are stale.
+            let resolved = await client.resolveMedia(target)
+            guard let self, self.loadToken == token else { return }
+
+            guard var fresh = resolved else {
+                self.isLoading = false
+                self.error = "Couldn't find this video in Telegram anymore. It may have been deleted, or the chat isn't available."
+                return
+            }
+            if fresh.duration <= 0 { fresh.duration = target.duration }
+            if fresh.key != target.key {
+                AppSettings.shared.upgradeHistoryItem(oldKey: target.key, with: fresh)
+            }
+            guard fresh.fileSize > 0 else {
+                self.isLoading = false
+                self.error = "Cannot open video (unknown file size)."
+                return
+            }
+
+            self.media = fresh
+            self.isMKV = fresh.isNonNativeContainer
+            self.videoDuration = fresh.duration
+            if fresh.duration > 0 { self.totalDuration = Double(fresh.duration) }
+            self.isResolved = true
+            self.updateNeighbors()
+
+            // Record in history right away with the persistent ids.
+            AppSettings.shared.savePosition(
+                fresh,
+                position: AppSettings.shared.position(forKey: fresh.key) ?? 0,
+                chatTitle: self.chatTitle,
+                duration: fresh.duration
+            )
+
+            // Keep the on-disk cache within the "max cached videos" setting.
+            let evicted = AppSettings.shared.noteStreamed(uniqueId: fresh.uniqueId, remoteId: fresh.remoteId)
+            if !evicted.isEmpty {
+                Task { await client.evictCachedFiles(evicted) }
+            }
+
+            await LocalStreamServer.shared.ensureRunning(with: client)
+            guard self.loadToken == token else { return }
+
+            let url = LocalStreamServer.shared.streamURL(fileId: fresh.fileId, fileSize: fresh.fileSize, fileName: fresh.fileName)
+            self.streamURL = url
+            if !self.isMKV {
+                self.setupAVPlayer(url: url)
+            }
+            // MKV: KSVideoPlayerSurfaceView is keyed by the URL and binds itself.
+        }
+    }
+
+    private func updateNeighbors() {
+        let videoList = allVideos.map { (fileId: $0.fileId, fileName: $0.fileName) }
+        let neighbors = EpisodeDetector.findNeighbors(currentFileId: media.fileId, videos: videoList)
+        previousMedia = neighbors.prev.flatMap { id in allVideos.first(where: { $0.fileId == id }) }
+        nextMedia = neighbors.next.flatMap { id in allVideos.first(where: { $0.fileId == id }) }
+        hasPrevious = previousMedia != nil
+        hasNext = nextMedia != nil
+    }
+
+    private func setupAVPlayer(url: URL) {
+        let asset = AVURLAsset(url: url)
+        let playerItem = AVPlayerItem(asset: asset)
+        playerItem.preferredForwardBufferDuration = 30
+
+        statusObserver = playerItem.observe(\.status) { [weak self] item, _ in
+            Task { @MainActor [weak self] in
+                guard let self, self.player.currentItem === item else { return }
+                switch item.status {
+                case .readyToPlay:
+                    self.isLoading = false
+                    self.error = nil
+                    let dur = item.duration.seconds
+                    if dur.isFinite && dur > 0 {
+                        self.totalDuration = dur
+                        self.videoDuration = Int(dur)
+                    }
+                    self.loadAVSubtitles(for: item)
+                    self.loadAVAudioTracks(for: item)
+                    if !self.hasRestoredPosition {
+                        self.hasRestoredPosition = true
+                        self.restorePosition()
+                    }
+                    self.player.playImmediately(atRate: self.playbackRate)
+                    self.isPlaying = true
+                    self.resetControlsTimer()
+                case .failed:
+                    self.isLoading = false
+                    self.error = item.error?.localizedDescription ?? "Cannot open video"
+                default:
+                    break
+                }
+            }
+        }
+
+        timeControlObserver = player.observe(\.timeControlStatus) { [weak self] p, _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                switch p.timeControlStatus {
+                case .playing:
+                    self.isPlaying = true
+                    self.isLoading = false
+                    self.error = nil
+                case .paused:
+                    self.isPlaying = false
+                case .waitingToPlayAtSpecifiedRate:
+                    self.isLoading = true
+                @unknown default:
+                    break
+                }
+            }
+        }
+
+        player.replaceCurrentItem(with: playerItem)
+        setupAVPositionTracking()
+        setupAVEndObserver(for: playerItem)
     }
 
     func bindKSPlayer(playerView: CustomKSPlayerView, url: URL, title: String) {
@@ -970,9 +1025,10 @@ class PlayerViewModel: ObservableObject {
         self.isLoading = true
         self.error = nil
 
-        playerView.playTimeDidChange = { [weak self] current, total in
+        playerView.playTimeDidChange = { [weak self, weak playerView] current, total in
+            let sourceId = playerView.map { ObjectIdentifier($0) }
             Task { @MainActor [weak self] in
-                guard let self else { return }
+                guard let self, let sourceId, let activeView = self.ksPlayerView, ObjectIdentifier(activeView) == sourceId else { return }
                 if !self.isScrubbing {
                     self.currentPosition = current
                 }
@@ -987,14 +1043,16 @@ class PlayerViewModel: ObservableObject {
             }
         }
 
-        playerView.onStateChange = { [weak self] state in
+        playerView.onStateChange = { [weak self, weak playerView] state in
+            let sourceId = playerView.map { ObjectIdentifier($0) }
             Task { @MainActor [weak self] in
-                guard let self else { return }
+                guard let self, let sourceId, let activeView = self.ksPlayerView, ObjectIdentifier(activeView) == sourceId else { return }
                 switch state {
                 case .readyToPlay:
                     self.isLoading = false
                     self.error = nil
                     self.isPlaying = true
+                    self.applyKSContentMode(animated: false)
                     self.loadKSTracks()
                     if !self.hasRestoredPosition {
                         self.hasRestoredPosition = true
@@ -1090,13 +1148,35 @@ class PlayerViewModel: ObservableObject {
     }
 
     func toggleAspect() {
-        videoGravity = (videoGravity == .resizeAspect) ? .resizeAspectFill : .resizeAspect
-        if isMKV {
-            UIView.animate(withDuration: 0.25) {
-                self.ksPlayerView?.contentMode = (self.videoGravity == .resizeAspect) ? .scaleAspectFit : .scaleAspectFill
-            }
-        }
+        _ = setAspect(fill: videoGravity == .resizeAspect)
+    }
+
+    /// Returns true if the mode changed.
+    @discardableResult
+    func setAspect(fill: Bool) -> Bool {
+        let target: AVLayerVideoGravity = fill ? .resizeAspectFill : .resizeAspect
         resetControlsTimer()
+        guard target != videoGravity else { return false }
+        videoGravity = target
+        if isMKV {
+            applyKSContentMode(animated: true)
+        }
+        return true
+    }
+
+    /// KSPlayer renders into its own view; setting contentMode on the wrapper view
+    /// (what we did before) had no effect, so zoom never worked for MKV/AVI/WebM/TS.
+    func applyKSContentMode(animated: Bool) {
+        guard let playerView = ksPlayerView else { return }
+        let mode: UIView.ContentMode = (videoGravity == .resizeAspect) ? .scaleAspectFit : .scaleAspectFill
+        let apply = {
+            playerView.playerLayer?.player.contentMode = mode
+        }
+        if animated {
+            UIView.animate(withDuration: 0.25, animations: apply)
+        } else {
+            apply()
+        }
     }
 
     func seekRelative(seconds: Double) {
@@ -1230,65 +1310,53 @@ class PlayerViewModel: ObservableObject {
     }
 
     func teardown() {
+        loadToken = UUID()
         controlsTimer?.invalidate()
         controlsTimer = nil
+        teardownPlayback()
+    }
+
+    private func teardownPlayback() {
         cancelAutoNext()
-        if isMKV {
-            ksPlayerView?.playerLayer?.player.pause()
+        if let ks = ksPlayerView {
+            ks.pause()
+            ks.resetPlayer()
             ksPlayerView = nil
-        } else {
-            player.pause()
-            player.replaceCurrentItem(with: nil)
-            statusObserver?.invalidate()
-            statusObserver = nil
-            timeControlObserver?.invalidate()
-            timeControlObserver = nil
-            if let obs = timeObserver {
-                player.removeTimeObserver(obs)
-                timeObserver = nil
-            }
-            if let obs = endObserver {
-                NotificationCenter.default.removeObserver(obs)
-                endObserver = nil
-            }
+        }
+        player.pause()
+        player.replaceCurrentItem(with: nil)
+        statusObserver?.invalidate()
+        statusObserver = nil
+        timeControlObserver?.invalidate()
+        timeControlObserver = nil
+        if let obs = timeObserver {
+            player.removeTimeObserver(obs)
+            timeObserver = nil
+        }
+        if let obs = endObserver {
+            NotificationCenter.default.removeObserver(obs)
+            endObserver = nil
         }
     }
 
     func savePosition() {
+        guard isResolved else { return }
         let currentTime = isMKV ? currentPosition : player.currentTime().seconds
-        let pos = (currentTime.isFinite && currentTime > 0) ? currentTime : (AppSettings.shared.playbackPositions[currentFileId] ?? 0)
-        AppSettings.shared.savePosition(
-            fileId: currentFileId,
-            fileSize: currentFileSize,
-            position: pos,
-            fileName: currentFileName,
-            chatId: chatId,
-            chatTitle: chatTitle,
-            duration: videoDuration,
-            thumbnailFileId: thumbnailFileId
-        )
+        let stored = AppSettings.shared.position(forKey: media.key) ?? 0
+        let pos = (currentTime.isFinite && currentTime > 0) ? currentTime : stored
+        AppSettings.shared.savePosition(media, position: pos, chatTitle: chatTitle, duration: videoDuration)
     }
 
     func playPrevious() {
-        guard let prevId = previousFileId,
-              let video = allVideos.first(where: { $0.fileId == prevId }),
-              let client = currentClient else { return }
-        cancelAutoNext()
-        teardown()
-        let ext = (video.fileName as NSString).pathExtension.lowercased()
-        let isM = ext == "mkv" || ext == "avi" || ext == "webm" || ext == "flv" || ext == "wmv" || ext == "ts"
-        setup(fileId: video.fileId, fileSize: video.fileSize, fileName: video.fileName, client: client, isMKV: isM)
+        guard let prev = previousMedia else { return }
+        savePosition()
+        load(prev)
     }
 
     func playNext() {
-        guard let nextId = nextFileId,
-              let video = allVideos.first(where: { $0.fileId == nextId }),
-              let client = currentClient else { return }
-        cancelAutoNext()
-        teardown()
-        let ext = (video.fileName as NSString).pathExtension.lowercased()
-        let isM = ext == "mkv" || ext == "avi" || ext == "webm" || ext == "flv" || ext == "wmv" || ext == "ts"
-        setup(fileId: video.fileId, fileSize: video.fileSize, fileName: video.fileName, client: client, isMKV: isM)
+        guard let next = nextMedia else { return }
+        savePosition()
+        load(next)
     }
 
     func cancelAutoNext() {
@@ -1298,23 +1366,24 @@ class PlayerViewModel: ObservableObject {
     }
 
     private func restorePosition() {
-        if let saved = AppSettings.shared.playbackPositions[currentFileId], saved > 3 {
-            if isMKV {
-                ksPlayerView?.playerLayer?.player.seek(time: saved) { [weak self] _ in
-                    Task { @MainActor [weak self] in
-                        guard let self else { return }
-                        if self.isPlaying {
-                            self.ksPlayerView?.playerLayer?.player.play()
-                        }
+        guard let saved = AppSettings.shared.position(forKey: media.key), saved > 3 else { return }
+        // Don't resume at the very end of a finished video; start over instead.
+        if totalDuration > 0 && saved >= totalDuration - 5 { return }
+        if isMKV {
+            ksPlayerView?.playerLayer?.player.seek(time: saved) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    if self.isPlaying {
+                        self.ksPlayerView?.playerLayer?.player.play()
                     }
                 }
-            } else {
-                let time = CMTime(seconds: saved, preferredTimescale: 600)
-                player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
             }
-            currentPosition = saved
-            lastSaveTime = saved
+        } else {
+            let time = CMTime(seconds: saved, preferredTimescale: 600)
+            player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
         }
+        currentPosition = saved
+        lastSaveTime = saved
     }
 
     private func setupAVPositionTracking() {
@@ -1378,6 +1447,7 @@ class PlayerViewModel: ObservableObject {
 // Transparent gesture coordinator overlay
 struct GestureOverlayView: UIViewRepresentable {
     var onToggleAspect: (() -> Void)? = nil
+    var onPinch: ((Bool) -> Void)? = nil
     var onSeekRelative: ((Double) -> Void)? = nil
     var onVolumeChanged: ((Float) -> Void)? = nil
     var onBrightnessChanged: ((CGFloat) -> Void)? = nil
@@ -1389,6 +1459,7 @@ struct GestureOverlayView: UIViewRepresentable {
 
         let coordinator = context.coordinator
         coordinator.onToggleAspect = onToggleAspect
+        coordinator.onPinch = onPinch
         coordinator.onSeekRelative = onSeekRelative
         coordinator.onVolumeChanged = onVolumeChanged
         coordinator.onBrightnessChanged = onBrightnessChanged
@@ -1414,6 +1485,7 @@ struct GestureOverlayView: UIViewRepresentable {
 
         // 4. Pan for Volume & Brightness
         let pan = UIPanGestureRecognizer(target: coordinator, action: #selector(GestureCoordinator.handlePan(_:)))
+        pan.maximumNumberOfTouches = 1 // two fingers belong to the pinch-to-zoom gesture
         pan.delegate = coordinator
         view.addGestureRecognizer(pan)
 
@@ -1422,7 +1494,16 @@ struct GestureOverlayView: UIViewRepresentable {
         return view
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {}
+    func updateUIView(_ uiView: UIView, context: Context) {
+        // Keep closures fresh so they never act on a stale view state.
+        let coordinator = context.coordinator
+        coordinator.onToggleAspect = onToggleAspect
+        coordinator.onPinch = onPinch
+        coordinator.onSeekRelative = onSeekRelative
+        coordinator.onVolumeChanged = onVolumeChanged
+        coordinator.onBrightnessChanged = onBrightnessChanged
+        coordinator.onToggleControls = onToggleControls
+    }
 
     func makeCoordinator() -> GestureCoordinator {
         GestureCoordinator()
@@ -1431,6 +1512,8 @@ struct GestureOverlayView: UIViewRepresentable {
 
 class GestureCoordinator: NSObject, UIGestureRecognizerDelegate {
     var onToggleAspect: (() -> Void)?
+    var onPinch: ((Bool) -> Void)?
+    private var pinchHandled = false
     var onSeekRelative: ((Double) -> Void)?
     var onVolumeChanged: ((Float) -> Void)?
     var onBrightnessChanged: ((CGFloat) -> Void)?
@@ -1465,9 +1548,25 @@ class GestureCoordinator: NSObject, UIGestureRecognizerDelegate {
     }
 
     @objc func handlePinch(_ gesture: UIPinchGestureRecognizer) {
-        guard gesture.state == .ended else { return }
-        if gesture.scale > 1.15 || gesture.scale < 0.85 {
-            onToggleAspect?()
+        switch gesture.state {
+        case .began:
+            pinchHandled = false
+            panSide = .none
+        case .changed:
+            // React as soon as the pinch is clear, instead of only on release (which
+            // was often swallowed by the pan gesture). Spread = zoom in, pinch = fit.
+            guard !pinchHandled else { return }
+            if gesture.scale > 1.08 {
+                pinchHandled = true
+                onPinch?(true)
+            } else if gesture.scale < 0.92 {
+                pinchHandled = true
+                onPinch?(false)
+            }
+        case .ended, .cancelled, .failed:
+            pinchHandled = false
+        default:
+            break
         }
     }
 
@@ -1484,6 +1583,11 @@ class GestureCoordinator: NSObject, UIGestureRecognizerDelegate {
         let location = gesture.location(in: view)
         let translation = gesture.translation(in: view)
         let velocity = gesture.velocity(in: view)
+
+        if gesture.numberOfTouches > 1 {
+            panSide = .none
+            return
+        }
 
         switch gesture.state {
         case .began:
@@ -1515,7 +1619,8 @@ class GestureCoordinator: NSObject, UIGestureRecognizerDelegate {
     }
 
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
-        return false
+        // Let pinch win even if a one-finger pan already started.
+        return gestureRecognizer is UIPinchGestureRecognizer || otherGestureRecognizer is UIPinchGestureRecognizer
     }
 }
 
@@ -1573,7 +1678,6 @@ struct KSVideoPlayerSurfaceView: UIViewRepresentable {
         let playerView = CustomKSPlayerView()
         playerView.suppressStockControls()
         playerView.backgroundColor = .black
-        playerView.contentMode = (viewModel.videoGravity == .resizeAspect) ? .scaleAspectFit : .scaleAspectFill
 
         // Disable internal gestures on KSPlayer so our GestureOverlayView has full priority
         for g in playerView.gestureRecognizers ?? [] {
@@ -1587,9 +1691,15 @@ struct KSVideoPlayerSurfaceView: UIViewRepresentable {
 
     func updateUIView(_ uiView: CustomKSPlayerView, context: Context) {
         uiView.suppressStockControls()
-        UIView.animate(withDuration: 0.25) {
-            uiView.contentMode = (viewModel.videoGravity == .resizeAspect) ? .scaleAspectFit : .scaleAspectFill
+        let mode: UIView.ContentMode = (viewModel.videoGravity == .resizeAspect) ? .scaleAspectFit : .scaleAspectFill
+        if uiView.playerLayer?.player.contentMode != mode {
+            uiView.playerLayer?.player.contentMode = mode
         }
+    }
+
+    static func dismantleUIView(_ uiView: CustomKSPlayerView, coordinator: ()) {
+        uiView.pause()
+        uiView.resetPlayer()
     }
 }
 

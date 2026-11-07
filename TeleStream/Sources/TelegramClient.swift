@@ -413,6 +413,181 @@ final class TelegramClient: ObservableObject {
         return nil
     }
 
+    // MARK: - Persistent media resolution
+    //
+    // TDLib file ids are only valid inside the current TDLib session. History entries
+    // saved before a force-close therefore point at the wrong file (or nothing), which
+    // made the player hang until history was cleared. These helpers re-locate a video
+    // from its chat message / persistent remote id and return fresh ids.
+
+    nonisolated static func media(from message: Message) -> PlayableMedia? {
+        switch message.content {
+        case .messageVideo(let vc):
+            let v = vc.video
+            return PlayableMedia(
+                fileId: v.video.id,
+                fileSize: v.video.size > 0 ? v.video.size : v.video.expectedSize,
+                fileName: v.fileName.isEmpty ? "Video.mp4" : v.fileName,
+                chatId: message.chatId,
+                messageId: message.id,
+                duration: v.duration,
+                uniqueId: v.video.remote.uniqueId,
+                remoteId: v.video.remote.id,
+                thumbnailFileId: v.thumbnail?.file.id,
+                thumbnailRemoteId: v.thumbnail?.file.remote.id ?? ""
+            )
+        case .messageDocument(let dc):
+            let d = dc.document
+            return PlayableMedia(
+                fileId: d.document.id,
+                fileSize: d.document.size > 0 ? d.document.size : d.document.expectedSize,
+                fileName: d.fileName.isEmpty ? "Video" : d.fileName,
+                chatId: message.chatId,
+                messageId: message.id,
+                duration: 0,
+                uniqueId: d.document.remote.uniqueId,
+                remoteId: d.document.remote.id,
+                thumbnailFileId: d.thumbnail?.file.id,
+                thumbnailRemoteId: d.thumbnail?.file.remote.id ?? ""
+            )
+        default:
+            return nil
+        }
+    }
+
+    /// Returns `media` with up-to-date, session-valid file ids, or nil if the video
+    /// can no longer be found.
+    func resolveMedia(_ media: PlayableMedia) async -> PlayableMedia? {
+        // 1. Best: reload the original message (also refreshes expired file references).
+        if media.chatId != 0 && media.messageId != 0,
+           let message = try? await client.getMessage(chatId: media.chatId, messageId: media.messageId),
+           var fresh = Self.media(from: message) {
+            if fresh.duration <= 0 { fresh.duration = media.duration }
+            return fresh
+        }
+
+        // 2. The fileId is still valid if it's the same physical file.
+        if media.fileId > 0, let file = try? await client.getFile(fileId: media.fileId), isSameFile(file, as: media) {
+            var fresh = media
+            fresh.uniqueId = file.remote.uniqueId
+            fresh.remoteId = file.remote.id
+            if fresh.fileSize <= 0 { fresh.fileSize = file.size > 0 ? file.size : file.expectedSize }
+            if !media.uniqueId.isEmpty || media.chatId == 0 || media.messageId != 0 {
+                return await withFreshThumbnail(fresh)
+            }
+            // Legacy entry (no persistent ids): prefer locating the message so we can store its id.
+            if let found = await findMediaInChat(media) { return found }
+            return await withFreshThumbnail(fresh)
+        }
+
+        // 3. Persistent remote id.
+        if !media.remoteId.isEmpty, let file = try? await client.getRemoteFile(fileType: nil, remoteFileId: media.remoteId) {
+            var fresh = media
+            fresh.fileId = file.id
+            fresh.uniqueId = file.remote.uniqueId
+            if fresh.fileSize <= 0 { fresh.fileSize = file.size > 0 ? file.size : file.expectedSize }
+            if let found = await findMediaInChat(fresh) { return found }
+            return await withFreshThumbnail(fresh)
+        }
+
+        // 4. Last resort: search the chat by file name / size.
+        return await findMediaInChat(media)
+    }
+
+    private func isSameFile(_ file: TDLibKit.File, as media: PlayableMedia) -> Bool {
+        if !media.uniqueId.isEmpty {
+            return file.remote.uniqueId == media.uniqueId
+        }
+        let size = file.size > 0 ? file.size : file.expectedSize
+        return media.fileSize > 0 && size == media.fileSize
+    }
+
+    private func withFreshThumbnail(_ media: PlayableMedia) async -> PlayableMedia {
+        var m = media
+        if !m.thumbnailRemoteId.isEmpty,
+           let thumb = try? await client.getRemoteFile(fileType: nil, remoteFileId: m.thumbnailRemoteId) {
+            m.thumbnailFileId = thumb.id
+        } else if m.thumbnailRemoteId.isEmpty {
+            m.thumbnailFileId = nil // stale session id; would show the wrong picture
+        }
+        return m
+    }
+
+    private func findMediaInChat(_ media: PlayableMedia) async -> PlayableMedia? {
+        guard media.chatId != 0 else { return nil }
+
+        func matches(_ m: PlayableMedia) -> Bool {
+            if !media.uniqueId.isEmpty { return m.uniqueId == media.uniqueId }
+            guard m.fileName == media.fileName else { return false }
+            return media.fileSize <= 0 || m.fileSize == media.fileSize
+        }
+
+        // Targeted search by file name first (cheap and works for older messages).
+        let baseName = (media.fileName as NSString).deletingPathExtension
+        if !baseName.isEmpty {
+            for filter in [SearchMessagesFilter.searchMessagesFilterDocument, .searchMessagesFilterVideo] {
+                if let res = try? await client.searchChatMessages(
+                    chatId: media.chatId,
+                    filter: filter,
+                    fromMessageId: 0,
+                    limit: 50,
+                    offset: 0,
+                    query: baseName,
+                    senderId: nil,
+                    topicId: nil
+                ) {
+                    for msg in res.messages {
+                        if var m = Self.media(from: msg), matches(m) {
+                            if m.duration <= 0 { m.duration = media.duration }
+                            return m
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fall back to the recent videos list.
+        if let messages = try? await getVideos(in: media.chatId) {
+            for msg in messages {
+                if var m = Self.media(from: msg), matches(m) {
+                    if m.duration <= 0 { m.duration = media.duration }
+                    return m
+                }
+            }
+        }
+        return nil
+    }
+
+    /// Upgrades history entries written by older app versions (session-scoped ids only).
+    func repairLegacyHistory() async {
+        let legacy = AppSettings.shared.continueWatching.filter { $0.isLegacy }
+        for item in legacy {
+            guard let found = await findMediaInChat(item.media) else { continue }
+            AppSettings.shared.upgradeHistoryItem(oldKey: item.key, with: found)
+        }
+    }
+
+    /// Resolve a thumbnail, preferring the persistent remote id.
+    func getThumbnail(remoteId: String, fallbackFileId: Int?) async -> UIImage? {
+        if !remoteId.isEmpty,
+           let file = try? await client.getRemoteFile(fileType: nil, remoteFileId: remoteId) {
+            return await getThumbnail(fileId: file.id)
+        }
+        return await getThumbnail(fileId: fallbackFileId)
+    }
+
+    /// Delete the local copies of videos that fell out of the "max cached videos" window.
+    func evictCachedFiles(_ files: [CachedStreamFile]) async {
+        for entry in files {
+            guard let file = try? await client.getRemoteFile(fileType: nil, remoteFileId: entry.remoteId) else { continue }
+            guard file.remote.uniqueId == entry.uniqueId else { continue }
+            if file.local.downloadedSize > 0 || file.local.isDownloadingActive {
+                _ = try? await client.cancelDownloadFile(fileId: file.id, onlyIfPending: false)
+                _ = try? await client.deleteFile(fileId: file.id)
+            }
+        }
+    }
+
     // MARK: - Cache Management
 
     static let maxCachedVideos = 3
@@ -424,15 +599,22 @@ final class TelegramClient: ObservableObject {
     }
 
     func clearCache() async {
-        let documents = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true)[0]
-        let tdlibFiles = documents + "/tdlib_files"
-        let fm = FileManager.default
-        if let contents = try? fm.contentsOfDirectory(atPath: tdlibFiles) {
-            for item in contents {
-                let path = (tdlibFiles as NSString).appendingPathComponent(item)
-                try? fm.removeItem(atPath: path)
-            }
-        }
+        // Let TDLib delete the files so its file database stays consistent. Deleting
+        // files behind TDLib's back left it reporting downloaded parts that no longer
+        // existed, so the stream server read empty data and playback stalled.
+        _ = try? await client.optimizeStorage(
+            chatIds: nil,
+            chatLimit: 0,
+            count: 0,
+            excludeChatIds: nil,
+            fileTypes: nil,
+            immunityDelay: 0,
+            returnDeletedFileStatistics: false,
+            size: 0,
+            ttl: 0
+        )
+        AppSettings.shared.recentStreamedFiles = []
+        thumbnailCache.removeAllObjects()
     }
 
     private static func directorySize(at path: String) -> Int64 {

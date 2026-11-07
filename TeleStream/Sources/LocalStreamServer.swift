@@ -22,6 +22,7 @@ final class LocalStreamServer: @unchecked Sendable {
     private var broadcaster: FileUpdateBroadcaster?
     private let lock = NSLock()
     private var activeConnections = [UUID: NWConnection]()
+    private var isReady = false
     private var byteSamples: [(time: CFAbsoluteTime, bytes: Int)] = []
     private let samplesLock = NSLock()
 
@@ -61,64 +62,153 @@ final class LocalStreamServer: @unchecked Sendable {
 
     @MainActor
     func start(with client: TelegramClient) {
+        lock.lock()
         self.tdClient = client.client
         self.broadcaster = client.fileUpdateBroadcaster
-        guard listener == nil else { return }
+        let hasListener = listener != nil
+        lock.unlock()
+        guard !hasListener else { return }
+        startListener(preferFixedPort: true)
+    }
 
+    /// (Re)creates the listener. iOS tears sockets down while the app is suspended and
+    /// a fixed port can be briefly unavailable after a force-close, so on failure we
+    /// fall back to an OS-assigned port instead of staying dead until the next launch.
+    private func startListener(preferFixedPort: Bool) {
+        let params = NWParameters.tcp
+        params.allowLocalEndpointReuse = true
+
+        let newListener: NWListener
         do {
-            let params = NWParameters.tcp
-            params.allowLocalEndpointReuse = true
-
-            let preferredPort = NWEndpoint.Port(rawValue: self.port) ?? 9123
-            let newListener: NWListener
-            if let fixedListener = try? NWListener(using: params, on: preferredPort) {
-                newListener = fixedListener
-                self.port = preferredPort.rawValue
+            if preferFixedPort, let fixed = try? NWListener(using: params, on: NWEndpoint.Port(rawValue: 9123) ?? .any) {
+                newListener = fixed
             } else {
                 newListener = try NWListener(using: params, on: .any)
             }
-            self.listener = newListener
-
-            newListener.stateUpdateHandler = { [weak self] state in
-                guard let self else { return }
-                switch state {
-                case .ready:
-                    if let p = newListener.port?.rawValue {
-                        self.port = p
-                        print("[LocalStreamServer] Listening on http://127.0.0.1:\(p)")
-                    }
-                case .failed(let error):
-                    print("[LocalStreamServer] Failed: \(error)")
-                    self.stop()
-                default:
-                    break
-                }
-            }
-
-            newListener.newConnectionHandler = { [weak self] connection in
-                self?.handleConnection(connection)
-            }
-
-            newListener.start(queue: .global(qos: .userInitiated))
         } catch {
             print("[LocalStreamServer] Init error: \(error)")
+            return
         }
+
+        lock.lock()
+        self.listener = newListener
+        lock.unlock()
+
+        newListener.stateUpdateHandler = { [weak self, weak newListener] state in
+            guard let self, let newListener else { return }
+            switch state {
+            case .ready:
+                if let p = newListener.port?.rawValue {
+                    self.lock.lock()
+                    self.port = p
+                    self.isReady = true
+                    self.lock.unlock()
+                    print("[LocalStreamServer] Listening on http://127.0.0.1:\(p)")
+                }
+            case .failed(let error):
+                print("[LocalStreamServer] Failed: \(error) — restarting")
+                self.lock.lock()
+                let isCurrent = self.listener === newListener
+                if isCurrent {
+                    self.listener = nil
+                    self.isReady = false
+                }
+                self.lock.unlock()
+                newListener.cancel()
+                if isCurrent {
+                    DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.2) {
+                        self.startListener(preferFixedPort: false)
+                    }
+                }
+            case .cancelled:
+                self.lock.lock()
+                if self.listener === newListener {
+                    self.listener = nil
+                    self.isReady = false
+                }
+                self.lock.unlock()
+            default:
+                break
+            }
+        }
+
+        newListener.newConnectionHandler = { [weak self] connection in
+            self?.handleConnection(connection)
+        }
+
+        newListener.start(queue: .global(qos: .userInitiated))
+    }
+
+    /// Ensures the server is listening and returns once it is ready (or after a short timeout).
+    @MainActor
+    func ensureRunning(with client: TelegramClient) async {
+        start(with: client)
+        for _ in 0..<40 {
+            lock.lock()
+            let ready = isReady && listener != nil
+            lock.unlock()
+            if ready { return }
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            start(with: client)
+        }
+    }
+
+    /// Called when the app returns to the foreground: a suspended listener is often dead.
+    @MainActor
+    func restartIfNeeded(with client: TelegramClient) {
+        lock.lock()
+        let current = listener
+        let healthy: Bool
+        if let current {
+            if case .ready = current.state { healthy = true } else { healthy = false }
+        } else {
+            healthy = false
+        }
+        lock.unlock()
+        if !healthy {
+            current?.cancel()
+            lock.lock()
+            if listener === current { listener = nil; isReady = false }
+            lock.unlock()
+        }
+        start(with: client)
     }
 
     func stop() {
-        listener?.cancel()
-        listener = nil
         lock.lock()
-        for (_, conn) in activeConnections {
-            conn.cancel()
-        }
+        let l = listener
+        listener = nil
+        isReady = false
+        let conns = Array(activeConnections.values)
         activeConnections.removeAll()
         lock.unlock()
+        l?.cancel()
+        for conn in conns {
+            conn.cancel()
+        }
     }
 
     func streamURL(fileId: Int, fileSize: Int64, fileName: String) -> URL {
-        let encodedName = fileName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "video.mp4"
-        return URL(string: "http://127.0.0.1:\(port)/stream?fileId=\(fileId)&fileSize=\(fileSize)&name=\(encodedName)")!
+        lock.lock()
+        let p = port
+        lock.unlock()
+        var comps = URLComponents()
+        comps.scheme = "http"
+        comps.host = "127.0.0.1"
+        comps.port = Int(p)
+        comps.path = "/stream"
+        // '&', '=', '+' and '#' are legal in a query but would break our parser.
+        var allowed = CharacterSet.urlQueryAllowed
+        allowed.remove(charactersIn: "&=+#?")
+        let encodedName = fileName.addingPercentEncoding(withAllowedCharacters: allowed) ?? "video.mp4"
+        comps.percentEncodedQuery = "fileId=\(fileId)&fileSize=\(fileSize)&name=\(encodedName)"
+        return comps.url ?? URL(string: "http://127.0.0.1:\(p)/stream?fileId=\(fileId)&fileSize=\(fileSize)")!
+    }
+
+    private func isConnectionAlive(_ connectionId: UUID) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return activeConnections[connectionId] != nil
     }
 
     private func handleConnection(_ connection: NWConnection) {
@@ -149,13 +239,38 @@ final class LocalStreamServer: @unchecked Sendable {
         lock.unlock()
     }
 
-    private func readRequest(connection: NWConnection, connectionId: UUID) {
+    private func readRequest(connection: NWConnection, connectionId: UUID, buffer: Data = Data()) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 8192) { [weak self] content, _, isComplete, error in
+            guard let self else { return }
+            var data = buffer
+            if let content { data.append(content) }
+
+            if let headerEnd = data.range(of: Data("\r\n\r\n".utf8)) {
+                let headerData = data.subdata(in: data.startIndex..<headerEnd.lowerBound)
+                guard let requestString = String(data: headerData, encoding: .utf8) ?? String(data: headerData, encoding: .isoLatin1) else {
+                    self.closeConnection(connectionId)
+                    return
+                }
+                self.watchForClientClose(connection: connection, connectionId: connectionId)
+                self.processHTTPRequest(requestString, connection: connection, connectionId: connectionId)
+            } else if isComplete || error != nil || data.count > 64 * 1024 {
+                self.closeConnection(connectionId)
+            } else {
+                self.readRequest(connection: connection, connectionId: connectionId, buffer: data)
+            }
+        }
+    }
+
+    /// AVPlayer / FFmpeg abort range requests by closing the socket. Notice that right
+    /// away so we stop pulling data from Telegram for a request nobody is reading.
+    private func watchForClientClose(connection: NWConnection, connectionId: UUID) {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 4096) { [weak self] content, _, isComplete, error in
             guard let self else { return }
-            if let data = content, let requestString = String(data: data, encoding: .utf8) {
-                self.processHTTPRequest(requestString, connection: connection, connectionId: connectionId)
-            } else if isComplete || error != nil {
+            if isComplete || error != nil {
                 self.closeConnection(connectionId)
+            } else if self.isConnectionAlive(connectionId) {
+                _ = content
+                self.watchForClientClose(connection: connection, connectionId: connectionId)
             }
         }
     }
@@ -196,27 +311,40 @@ final class LocalStreamServer: @unchecked Sendable {
             return
         }
 
-        // Parse Range header
+        // Parse Range header (supports "bytes=a-b", "bytes=a-" and suffix "bytes=-n")
         var startOffset: Int64 = 0
         var endOffset: Int64 = fileSize - 1
         var isRangeRequest = false
 
-        for line in lines {
-            if line.lowercased().hasPrefix("range:") {
-                isRangeRequest = true
-                let rangeValue = line.replacingOccurrences(of: "range:", with: "", options: .caseInsensitive)
-                    .trimmingCharacters(in: .whitespaces)
-                if rangeValue.hasPrefix("bytes=") {
-                    let byteRange = rangeValue.replacingOccurrences(of: "bytes=", with: "")
-                    let rangeParts = byteRange.components(separatedBy: "-")
-                    if let s = Int64(rangeParts[0]) {
-                        startOffset = s
-                    }
-                    if rangeParts.count > 1 && !rangeParts[1].isEmpty, let e = Int64(rangeParts[1]) {
-                        endOffset = min(e, fileSize - 1)
-                    }
+        for line in lines.dropFirst() {
+            guard let colon = line.firstIndex(of: ":") else { continue }
+            let name = line[..<colon].trimmingCharacters(in: .whitespaces).lowercased()
+            guard name == "range" else { continue }
+            let value = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+            guard value.lowercased().hasPrefix("bytes=") else { continue }
+            let spec = value.dropFirst(6).split(separator: ",").first.map(String.init) ?? ""
+            let rangeParts = spec.split(separator: "-", maxSplits: 1, omittingEmptySubsequences: false).map {
+                $0.trimmingCharacters(in: .whitespaces)
+            }
+            guard rangeParts.count == 2 else { continue }
+            isRangeRequest = true
+            if rangeParts[0].isEmpty {
+                if let suffix = Int64(rangeParts[1]), suffix > 0 {
+                    startOffset = max(0, fileSize - suffix)
+                }
+            } else if let s = Int64(rangeParts[0]) {
+                startOffset = s
+                if !rangeParts[1].isEmpty, let e = Int64(rangeParts[1]) {
+                    endOffset = min(e, fileSize - 1)
                 }
             }
+        }
+
+        if startOffset >= fileSize || startOffset > endOffset {
+            sendResponse(connection: connection, header: "HTTP/1.1 416 Range Not Satisfiable\r\nContent-Range: bytes */\(fileSize)\r\nContent-Length: 0\r\nConnection: close\r\n\r\n", body: nil) {
+                self.closeConnection(connectionId)
+            }
+            return
         }
 
         let mimeType = mimeTypeFor(fileName: fileName)
@@ -279,57 +407,65 @@ final class LocalStreamServer: @unchecked Sendable {
         connection: NWConnection,
         connectionId: UUID
     ) async {
-        guard let tdClient = self.tdClient, let broadcaster = self.broadcaster else {
+        lock.lock()
+        let tdClientOpt = self.tdClient
+        lock.unlock()
+        guard let tdClient = tdClientOpt else {
             closeConnection(connectionId)
             return
         }
 
+        let wholeFirst = await MainActor.run { AppSettings.shared.downloadWholeFirst }
         var currentOffset = startOffset
-        let chunkSize: Int64 = 1024 * 1024 // 1MB chunks
+        let maxChunk: Int64 = 512 * 1024
         var errorCount = 0
+        var lastRequestedOffset: Int64 = -1
+        var lastProgressTime = CFAbsoluteTimeGetCurrent()
+        var stallStart: CFAbsoluteTime? = nil
 
         while currentOffset <= endOffset {
-            lock.lock()
-            let isAlive = activeConnections[connectionId] != nil
-            lock.unlock()
-            guard isAlive else { break }
-
-            let bytesToRead = Int(min(chunkSize, endOffset - currentOffset + 1))
+            guard isConnectionAlive(connectionId) else { break }
 
             do {
-                // Request download chunk from TDLib
-                let file = try await tdClient.downloadFile(
-                    fileId: fileId,
-                    limit: Int64(bytesToRead),
-                    offset: currentOffset,
-                    priority: 32,
-                    synchronous: false
-                )
+                // Ask TDLib how many contiguous bytes exist *at this exact offset*.
+                // (The old check compared against downloadedPrefixSize as if it were
+                // measured from 0; it is measured from download_offset, so after a
+                // restart we could "find" bytes that were never downloaded and feed
+                // zeros to the player.)
+                var available = try await tdClient.getFileDownloadedPrefixSize(fileId: fileId, offset: currentOffset).size
 
-                let available = bytesAvailable(in: file, at: currentOffset, length: bytesToRead)
-                var downloaded = available
-                if downloaded == 0 {
-                    downloaded = await waitForBytes(broadcaster: broadcaster, at: currentOffset, length: bytesToRead, timeout: 12.0)
-                }
-
-                if downloaded == 0 {
-                    try await Task.sleep(nanoseconds: 200_000_000)
+                if available <= 0 {
+                    // (Re)start the download at our offset when nothing is coming in —
+                    // either first request, or another connection moved TDLib elsewhere.
+                    let now = CFAbsoluteTimeGetCurrent()
+                    if lastRequestedOffset != currentOffset || now - lastProgressTime > 1.5 {
+                        let dlOffset: Int64 = wholeFirst ? 0 : currentOffset
+                        let dlLimit: Int64 = wholeFirst ? 0 : (endOffset - currentOffset + 1)
+                        _ = try await tdClient.downloadFile(
+                            fileId: fileId,
+                            limit: dlLimit,
+                            offset: dlOffset,
+                            priority: 32,
+                            synchronous: false
+                        )
+                        lastRequestedOffset = currentOffset
+                        lastProgressTime = now
+                    }
+                    if stallStart == nil { stallStart = now }
+                    if let st = stallStart, now - st > 90 {
+                        print("[LocalStreamServer] No data for 90s at offset \(currentOffset), giving up")
+                        break
+                    }
+                    try await Task.sleep(nanoseconds: 80_000_000)
                     continue
                 }
 
-                let currentFile = try await tdClient.getFile(fileId: fileId)
-                let path = currentFile.local.path
-                guard !path.isEmpty, let fileHandle = FileHandle(forReadingAtPath: path) else {
-                    try await Task.sleep(nanoseconds: 200_000_000)
-                    continue
-                }
+                stallStart = nil
+                available = min(available, endOffset - currentOffset + 1, maxChunk)
 
-                try fileHandle.seek(toOffset: UInt64(currentOffset))
-                let data = fileHandle.readData(ofLength: downloaded)
-                fileHandle.closeFile()
-
+                let data = try await readBytes(tdClient: tdClient, fileId: fileId, offset: currentOffset, count: available)
                 guard !data.isEmpty else {
-                    try await Task.sleep(nanoseconds: 200_000_000)
+                    try await Task.sleep(nanoseconds: 100_000_000)
                     continue
                 }
 
@@ -338,55 +474,40 @@ final class LocalStreamServer: @unchecked Sendable {
                         continuation.resume(returning: error == nil)
                     })
                 }
-
-                if !sendSuccess {
-                    break
-                }
+                if !sendSuccess { break }
 
                 self.recordBytesTransferred(data.count)
                 currentOffset += Int64(data.count)
+                lastProgressTime = CFAbsoluteTimeGetCurrent()
                 errorCount = 0
             } catch {
                 errorCount += 1
-                if errorCount > 15 {
-                    break
-                }
-                try? await Task.sleep(nanoseconds: 500_000_000)
-                continue
+                if errorCount > 15 { break }
+                try? await Task.sleep(nanoseconds: 300_000_000)
             }
         }
 
         closeConnection(connectionId)
     }
 
-    private func bytesAvailable(in file: TDLibKit.File, at offset: Int64, length: Int) -> Int {
-        if file.local.isDownloadingCompleted {
-            return length
-        }
-        let prefix = Int64(file.local.downloadedPrefixSize)
-        if prefix > 0 && offset < prefix {
-            return Int(min(Int64(length), prefix - offset))
-        }
-        let chunkStart = Int64(file.local.downloadOffset)
-        let chunkEnd = chunkStart + prefix
-        if prefix > 0 && offset >= chunkStart && offset < chunkEnd {
-            return Int(min(Int64(length), chunkEnd - offset))
-        }
-        return 0
-    }
-
-    private func waitForBytes(broadcaster: FileUpdateBroadcaster, at offset: Int64, length: Int, timeout: Double) async -> Int {
-        let stream = broadcaster.subscribe()
-        let deadline = ContinuousClock.now + .seconds(timeout)
-
-        for await file in stream {
-            if ContinuousClock.now >= deadline { break }
-            let avail = bytesAvailable(in: file, at: offset, length: length)
-            if avail > 0 {
-                return avail
+    /// Reads bytes that TDLib reported as present. Uses the file on disk directly and
+    /// falls back to TDLib's readFilePart if the path moved (e.g. download finished).
+    private func readBytes(tdClient: TDLibClient, fileId: Int, offset: Int64, count: Int64) async throws -> Data {
+        let file = try await tdClient.getFile(fileId: fileId)
+        let path = file.local.path
+        if !path.isEmpty, let handle = try? FileHandle(forReadingFrom: URL(fileURLWithPath: path)) {
+            defer { try? handle.close() }
+            do {
+                try handle.seek(toOffset: UInt64(offset))
+                if let data = try handle.read(upToCount: Int(count)), !data.isEmpty {
+                    return data
+                }
+            } catch {
+                // fall through to TDLib read
             }
         }
-        return 0
+        let part = try await tdClient.readFilePart(count: count, fileId: fileId, offset: offset)
+        return part.data
     }
 
     private func sendResponse(connection: NWConnection, header: String, body: Data?, completion: @escaping () -> Void) {
