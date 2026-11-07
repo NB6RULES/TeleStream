@@ -61,6 +61,7 @@ struct ContentView: View {
 struct MainTabView: View {
     @State private var selectedTab = 0
     @ObservedObject var ipaDownloader = IPADownloader.shared
+    @ObservedObject var playerPresenter = PlayerPresenter.shared
 
     private var tabSelectionBinding: Binding<Int> {
         Binding(
@@ -119,6 +120,15 @@ struct MainTabView: View {
                 .padding(.top, 54)
                 .zIndex(100)
             }
+        }
+        .fullScreenCover(item: $playerPresenter.item) { item in
+            PlayerView(
+                media: item.media,
+                chatTitle: item.chatTitle,
+                allVideos: item.allVideos
+            )
+            .environmentObject(TelegramClient.shared)
+            .environmentObject(AppSettings.shared)
         }
         .task {
             await TelegramClient.shared.repairLegacyHistory()
@@ -213,7 +223,6 @@ struct UpdateBannerView: View {
 
 struct ContinueWatchingRow: View {
     @ObservedObject var settings = AppSettings.shared
-    @State private var selectedPlayerItem: ActivePlayerItem? = nil
 
     var body: some View {
         if !settings.continueWatching.isEmpty {
@@ -234,10 +243,7 @@ struct ContinueWatchingRow: View {
                     HStack(spacing: 12) {
                         ForEach(settings.continueWatching) { item in
                             Button(action: {
-                                selectedPlayerItem = ActivePlayerItem(
-                                    media: item.media,
-                                    chatTitle: item.chatTitle
-                                )
+                                PlayerPresenter.shared.play(item.media, chatTitle: item.chatTitle)
                             }) {
                                 ContinueWatchingCard(item: item)
                             }
@@ -249,13 +255,6 @@ struct ContinueWatchingRow: View {
                 }
             }
             .padding(.vertical, 8)
-            .fullScreenCover(item: $selectedPlayerItem) { item in
-                PlayerView(
-                    media: item.media,
-                    chatTitle: item.chatTitle,
-                    allVideos: item.allVideos
-                )
-            }
         }
     }
 }

@@ -10,7 +10,6 @@ struct ChatDetailView: View {
     @State private var videos: [Message] = []
     @State private var isLoading = true
     @State private var searchText = ""
-    @State private var selectedPlayerItem: ActivePlayerItem? = nil
 
     var body: some View {
         ZStack {
@@ -85,11 +84,7 @@ struct ChatDetailView: View {
                                     ForEach(filteredVideos, id: \.id) { message in
                                         if let info = extractVideoInfo(from: message) {
                                             Button(action: {
-                                                selectedPlayerItem = ActivePlayerItem(
-                                                    media: info.media,
-                                                    chatTitle: title,
-                                                    allVideos: allVideosList
-                                                )
+                                                PlayerPresenter.shared.play(info.media, chatTitle: title, allVideos: allVideosList)
                                             }) {
                                                 VideoTileCard(info: info, timestamp: message.date)
                                             }
@@ -105,11 +100,7 @@ struct ChatDetailView: View {
                                     ForEach(filteredVideos, id: \.id) { message in
                                         if let info = extractVideoInfo(from: message) {
                                             Button(action: {
-                                                selectedPlayerItem = ActivePlayerItem(
-                                                    media: info.media,
-                                                    chatTitle: title,
-                                                    allVideos: allVideosList
-                                                )
+                                                PlayerPresenter.shared.play(info.media, chatTitle: title, allVideos: allVideosList)
                                             }) {
                                                 if let video = info.video {
                                                     VideoCard(video: video, caption: info.caption, timestamp: message.date)
@@ -150,13 +141,6 @@ struct ChatDetailView: View {
             }
         }
         .preferredColorScheme(.dark)
-        .fullScreenCover(item: $selectedPlayerItem) { item in
-            PlayerView(
-                media: item.media,
-                chatTitle: item.chatTitle,
-                allVideos: item.allVideos
-            )
-        }
         .task {
             await refreshVideos()
         }
