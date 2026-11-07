@@ -1169,8 +1169,9 @@ class PlayerViewModel: ObservableObject {
     func applyKSContentMode(animated: Bool) {
         guard let playerView = ksPlayerView else { return }
         let mode: UIView.ContentMode = (videoGravity == .resizeAspect) ? .scaleAspectFit : .scaleAspectFill
-        let apply = {
+        let apply: () -> Void = {
             playerView.playerLayer?.player.contentMode = mode
+            return
         }
         if animated {
             UIView.animate(withDuration: 0.25, animations: apply)
