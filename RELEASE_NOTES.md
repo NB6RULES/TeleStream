@@ -1,0 +1,10 @@
+- Fixed: videos from History/Recents not playing after the app was force-closed (no more clearing history to make playback work)
+- Fixed: pinch-to-zoom / fill-screen not working on MKV, AVI, WebM and TS videos
+- Fixed: pinch gesture often swallowed by the volume/brightness swipe
+- Fixed: next/previous episode not switching the video for MKV files (and when switching between MKV and MP4)
+- Fixed: stream server could send empty data after a restart, causing endless buffering
+- Fixed: stream server staying dead after the app was in the background
+- Fixed: "Clear Video Cache" leaving Telegram's file database out of sync and breaking playback
+- Fixed: wrong or missing thumbnails in History/Recents after a restart
+- "Max cached videos" and "Download whole video first" settings now actually work
+- Old history entries are automatically repaired and keep their watch progress

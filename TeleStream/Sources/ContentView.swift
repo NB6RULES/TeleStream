@@ -121,6 +121,9 @@ struct MainTabView: View {
             }
         }
         .task {
+            await TelegramClient.shared.repairLegacyHistory()
+        }
+        .task {
             await ipaDownloader.checkForUpdates()
         }
     }
@@ -232,13 +235,8 @@ struct ContinueWatchingRow: View {
                         ForEach(settings.continueWatching) { item in
                             Button(action: {
                                 selectedPlayerItem = ActivePlayerItem(
-                                    fileId: item.fileId,
-                                    fileSize: item.fileSize,
-                                    fileName: item.fileName,
-                                    chatId: item.chatId,
-                                    chatTitle: item.chatTitle,
-                                    duration: item.duration,
-                                    thumbnailFileId: item.thumbnailFileId
+                                    media: item.media,
+                                    chatTitle: item.chatTitle
                                 )
                             }) {
                                 ContinueWatchingCard(item: item)
@@ -253,13 +251,8 @@ struct ContinueWatchingRow: View {
             .padding(.vertical, 8)
             .fullScreenCover(item: $selectedPlayerItem) { item in
                 PlayerView(
-                    fileId: item.fileId,
-                    fileSize: item.fileSize,
-                    fileName: item.fileName,
-                    chatId: item.chatId,
+                    media: item.media,
                     chatTitle: item.chatTitle,
-                    duration: item.duration,
-                    thumbnailFileId: item.thumbnailFileId,
                     allVideos: item.allVideos
                 )
             }
@@ -273,7 +266,7 @@ struct ContinueWatchingCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             ZStack {
-                FileIdThumbnailView(fileId: item.thumbnailFileId)
+                FileIdThumbnailView(fileId: nil, remoteId: item.thumbnailRemoteId)
                     .frame(width: 180, height: 100)
                     .clipped()
                     .cornerRadius(8)
@@ -336,6 +329,7 @@ struct ContinueWatchingCard: View {
     }
 
     private var timeRemaining: String {
+        guard item.duration > 0 else { return "Resume" }
         let remaining = max(0, item.duration - Int(item.position))
         let m = remaining / 60
         let s = remaining % 60

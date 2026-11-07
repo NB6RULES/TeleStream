@@ -65,18 +65,13 @@ struct HistoryView: View {
                                     ForEach(filteredItems) { item in
                                         Button(action: {
                                             selectedPlayerItem = ActivePlayerItem(
-                                                fileId: item.fileId,
-                                                fileSize: item.fileSize,
-                                                fileName: item.fileName,
-                                                chatId: item.chatId,
-                                                chatTitle: item.chatTitle,
-                                                duration: item.duration,
-                                                thumbnailFileId: item.thumbnailFileId
+                                                media: item.media,
+                                                chatTitle: item.chatTitle
                                             )
                                         }) {
                                             HistoryCard(item: item) {
                                                 withAnimation {
-                                                    settings.clearPosition(fileId: item.fileId)
+                                                    settings.clearPosition(key: item.key)
                                                 }
                                             }
                                         }
@@ -130,13 +125,8 @@ struct HistoryView: View {
         .preferredColorScheme(.dark)
         .fullScreenCover(item: $selectedPlayerItem) { item in
             PlayerView(
-                fileId: item.fileId,
-                fileSize: item.fileSize,
-                fileName: item.fileName,
-                chatId: item.chatId,
+                media: item.media,
                 chatTitle: item.chatTitle,
-                duration: item.duration,
-                thumbnailFileId: item.thumbnailFileId,
                 allVideos: item.allVideos
             )
         }
@@ -187,6 +177,7 @@ struct HistoryView: View {
 
 struct FileIdThumbnailView: View {
     let fileId: Int?
+    var remoteId: String = ""
     @EnvironmentObject var client: TelegramClient
     @State private var image: UIImage? = nil
 
@@ -204,9 +195,11 @@ struct FileIdThumbnailView: View {
                     .foregroundColor(Color(hex: "ADC6FF").opacity(0.8))
             }
         }
-        .task {
-            guard let id = fileId else { return }
-            image = await client.getThumbnail(fileId: id)
+        .task(id: "\(remoteId)|\(fileId ?? 0)") {
+            // Prefer the persistent remote id: session file ids go stale after a restart
+            // and would show (or fail to load) the wrong thumbnail.
+            guard !remoteId.isEmpty || fileId != nil else { return }
+            image = await client.getThumbnail(remoteId: remoteId, fallbackFileId: fileId)
         }
     }
 }
@@ -228,7 +221,7 @@ struct HistoryCard: View {
         HStack(spacing: 14) {
             // Thumbnail / Icon box
             ZStack {
-                FileIdThumbnailView(fileId: item.thumbnailFileId)
+                FileIdThumbnailView(fileId: nil, remoteId: item.thumbnailRemoteId)
                     .frame(width: 84, height: 60)
                     .clipped()
                     .cornerRadius(10)

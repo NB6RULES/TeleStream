@@ -86,13 +86,8 @@ struct ChatDetailView: View {
                                         if let info = extractVideoInfo(from: message) {
                                             Button(action: {
                                                 selectedPlayerItem = ActivePlayerItem(
-                                                    fileId: info.fileId,
-                                                    fileSize: info.fileSize,
-                                                    fileName: info.fileName,
-                                                    chatId: chatId,
+                                                    media: info.media,
                                                     chatTitle: title,
-                                                    duration: info.duration,
-                                                    thumbnailFileId: info.thumbnailFile?.id,
                                                     allVideos: allVideosList
                                                 )
                                             }) {
@@ -111,20 +106,15 @@ struct ChatDetailView: View {
                                         if let info = extractVideoInfo(from: message) {
                                             Button(action: {
                                                 selectedPlayerItem = ActivePlayerItem(
-                                                    fileId: info.fileId,
-                                                    fileSize: info.fileSize,
-                                                    fileName: info.fileName,
-                                                    chatId: chatId,
+                                                    media: info.media,
                                                     chatTitle: title,
-                                                    duration: info.duration,
-                                                    thumbnailFileId: info.thumbnailFile?.id,
                                                     allVideos: allVideosList
                                                 )
                                             }) {
                                                 if let video = info.video {
                                                     VideoCard(video: video, caption: info.caption, timestamp: message.date)
                                                 } else {
-                                                    DocumentVideoCard(fileName: info.fileName, fileSize: info.fileSize, caption: info.caption, timestamp: message.date, fileId: info.fileId, duration: info.duration, thumbnailFile: info.thumbnailFile)
+                                                    DocumentVideoCard(fileName: info.fileName, fileSize: info.fileSize, caption: info.caption, timestamp: message.date, file: info.file, duration: info.duration, thumbnailFile: info.thumbnailFile)
                                                 }
                                             }
                                             .buttonStyle(CardPressButtonStyle())
@@ -162,13 +152,8 @@ struct ChatDetailView: View {
         .preferredColorScheme(.dark)
         .fullScreenCover(item: $selectedPlayerItem) { item in
             PlayerView(
-                fileId: item.fileId,
-                fileSize: item.fileSize,
-                fileName: item.fileName,
-                chatId: item.chatId,
+                media: item.media,
                 chatTitle: item.chatTitle,
-                duration: item.duration,
-                thumbnailFileId: item.thumbnailFileId,
                 allVideos: item.allVideos
             )
         }
@@ -181,6 +166,8 @@ struct ChatDetailView: View {
     }
 
     struct VideoInfo {
+        let media: PlayableMedia
+        let file: TDLibKit.File
         let fileId: Int
         let fileSize: Int64
         let fileName: String
@@ -191,10 +178,13 @@ struct ChatDetailView: View {
     }
 
     private func extractVideoInfo(from message: Message) -> VideoInfo? {
+        guard let media = TelegramClient.media(from: message) else { return nil }
         switch message.content {
         case .messageVideo(let vc):
             let v = vc.video
             return VideoInfo(
+                media: media,
+                file: v.video,
                 fileId: v.video.id,
                 fileSize: Int64(v.video.size > 0 ? v.video.size : v.video.expectedSize),
                 fileName: v.fileName.isEmpty ? "Video" : v.fileName,
@@ -207,6 +197,8 @@ struct ChatDetailView: View {
             let d = dc.document
             let size = Int64(d.document.size > 0 ? d.document.size : (d.document.expectedSize > 0 ? d.document.expectedSize : 0))
             return VideoInfo(
+                media: media,
+                file: d.document,
                 fileId: d.document.id,
                 fileSize: size,
                 fileName: d.fileName.isEmpty ? "Video" : d.fileName,
@@ -220,11 +212,8 @@ struct ChatDetailView: View {
         }
     }
 
-    private var allVideosList: [(fileId: Int, fileName: String, fileSize: Int64)] {
-        videos.compactMap { message -> (fileId: Int, fileName: String, fileSize: Int64)? in
-            guard let info = extractVideoInfo(from: message) else { return nil }
-            return (fileId: info.fileId, fileName: info.fileName, fileSize: info.fileSize)
-        }
+    private var allVideosList: [PlayableMedia] {
+        videos.compactMap { TelegramClient.media(from: $0) }
     }
 
     private var filteredVideos: [Message] {
@@ -425,9 +414,7 @@ struct VideoCard: View {
     }
 
     @MainActor private var watchProgress: Double? {
-        let pos = AppSettings.shared.playbackPositions[video.video.id]
-        guard let p = pos, video.duration > 0 else { return nil }
-        return p / Double(video.duration)
+        AppSettings.shared.progress(for: video.video, duration: video.duration)
     }
 
     private func resolutionBadge(_ text: String) -> some View {
@@ -467,7 +454,7 @@ struct DocumentVideoCard: View {
     let fileSize: Int64
     let caption: String
     let timestamp: Int
-    let fileId: Int
+    let file: TDLibKit.File
     let duration: Int
     var thumbnailFile: TDLibKit.File? = nil
 
@@ -582,9 +569,7 @@ struct DocumentVideoCard: View {
     }
 
     @MainActor private var watchProgress: Double? {
-        let pos = AppSettings.shared.playbackPositions[fileId]
-        guard let p = pos, duration > 0 else { return nil }
-        return p / Double(duration)
+        AppSettings.shared.progress(for: file, duration: duration)
     }
 
     private func formatSize(_ bytes: Int64) -> String {
@@ -610,8 +595,7 @@ struct VideoTileCard: View {
     }
 
     @MainActor private var watchProgress: Double? {
-        guard let current = AppSettings.shared.playbackPositions[info.fileId], info.duration > 0 else { return nil }
-        return min(max(current / Double(info.duration), 0), 1)
+        AppSettings.shared.progress(for: info.file, duration: info.duration)
     }
 
     var body: some View {

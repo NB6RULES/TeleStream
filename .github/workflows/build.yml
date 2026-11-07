@@ -88,7 +88,11 @@ jobs:
         git tag -f "$VERSION_TAG"
         git push origin "$VERSION_TAG" --force
 
+        CHANGES=""
+        if [ -f RELEASE_NOTES.md ]; then CHANGES="$(cat RELEASE_NOTES.md)"; fi
         NOTES="## TeleStream v${VERSION}
+
+        ${CHANGES}
 
         Built from commit $(git rev-parse --short HEAD) on $(date -u '+%Y-%m-%d %H:%M UTC')
 
@@ -114,6 +118,12 @@ jobs:
 
         version = "$VERSION"
         size = int("$IPA_SIZE") if "$IPA_SIZE".isdigit() else 0
+        summary = f"TeleStream v{version} automated build."
+        if os.path.exists("RELEASE_NOTES.md"):
+            lines = [l.strip().lstrip("-*# ").strip() for l in open("RELEASE_NOTES.md").read().splitlines()]
+            lines = [l for l in lines if l]
+            if lines:
+                summary = f"v{version}: " + " • ".join(lines)
         now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
         if os.path.exists("sources.json"):
@@ -124,6 +134,7 @@ jobs:
                 if app.get("bundleIdentifier") == "com.telestream.TeleStream":
                     app["version"] = version
                     app["versionDate"] = now
+                    app["versionDescription"] = summary
                     if size > 0:
                         app["size"] = size
                     app["downloadURL"] = "https://github.com/NB6RULES/TeleStream/releases/latest/download/TeleStream.ipa"
@@ -137,7 +148,7 @@ jobs:
                         "date": now,
                         "size": size,
                         "downloadURL": f"https://github.com/NB6RULES/TeleStream/releases/download/v{version}/TeleStream.ipa",
-                        "localizedDescription": f"TeleStream v{version} automated build."
+                        "localizedDescription": summary
                     })
                     app["versions"] = app["versions"][:10]
 
