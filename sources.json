@@ -10,15 +10,22 @@
       "name": "TeleStream",
       "bundleIdentifier": "com.telestream.TeleStream",
       "developerName": "NB6RULES",
-      "version": "1.61",
-      "versionDate": "2026-11-07T07:25:54Z",
-      "versionDescription": "v1.61: Fixed: player looping between \"Locating Video\" and \"Buffering\" when resuming after a force-close \u2022 Fixed: extra progress bar from the built-in MKV player that never went away \u2022 New playback speed panel: clean preset grid plus fine-tune -/+ (0.05x steps) \u2022 Smoother audio at 0.25x-3x speeds, and the chosen speed now sticks after pause/seek \u2022 Bigger buffer for MKV/AVI/WebM so faster speeds don't stutter",
+      "version": "1.62",
+      "versionDate": "2026-11-07T07:52:43Z",
+      "versionDescription": "v1.62: Fixed: skipped / choppy frames when watching at faster playback speeds (MKV, AVI, WebM, TS) \u2022 Smoother playback on ProMotion (120 Hz) iPhones \u2022 Fewer background saves while watching, so the player no longer hitches every few seconds",
       "downloadURL": "https://github.com/NB6RULES/TeleStream/releases/latest/download/TeleStream.ipa",
       "iconURL": "https://raw.githubusercontent.com/NB6RULES/TeleStream/main/TeleStream/Sources/Assets.xcassets/TeleStreamLogo.imageset/logo.png",
       "localizedDescription": "TeleStream is a fast and native iOS streaming player powered by TDLibKit to stream and play media from your Telegram chats, channels, and cloud storage.",
       "tintColor": "#0088CC",
-      "size": 52662037,
+      "size": 52658686,
       "versions": [
+        {
+          "version": "1.62",
+          "date": "2026-11-07T07:52:43Z",
+          "size": 52658686,
+          "downloadURL": "https://github.com/NB6RULES/TeleStream/releases/download/v1.62/TeleStream.ipa",
+          "localizedDescription": "v1.62: Fixed: skipped / choppy frames when watching at faster playback speeds (MKV, AVI, WebM, TS) \u2022 Smoother playback on ProMotion (120 Hz) iPhones \u2022 Fewer background saves while watching, so the player no longer hitches every few seconds"
+        },
         {
           "version": "1.61",
           "date": "2026-11-07T07:25:54Z",
@@ -81,13 +88,6 @@
           "size": 51245612,
           "downloadURL": "https://github.com/NB6RULES/TeleStream/releases/download/v1.52/TeleStream.ipa",
           "localizedDescription": "TeleStream v1.52 automated build."
-        },
-        {
-          "version": "1.51",
-          "date": "2026-08-30T16:53:24Z",
-          "size": 51250155,
-          "downloadURL": "https://github.com/NB6RULES/TeleStream/releases/download/v1.51/TeleStream.ipa",
-          "localizedDescription": "TeleStream v1.51 automated build."
         }
       ],
       "appPermissions": {
