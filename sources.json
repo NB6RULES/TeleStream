@@ -10,15 +10,22 @@
       "name": "TeleStream",
       "bundleIdentifier": "com.telestream.TeleStream",
       "developerName": "NB6RULES",
-      "version": "1.59",
-      "versionDate": "2026-08-31T17:10:59Z",
-      "versionDescription": "Real-time LiveContainer & SideStore/AltStore source release with phone login state machine and QR auth fixes.",
+      "version": "1.60",
+      "versionDate": "2026-11-07T06:56:08Z",
+      "versionDescription": "v1.60: Fixed: videos from History/Recents not playing after the app was force-closed (no more clearing history to make playback work) \u2022 Fixed: pinch-to-zoom / fill-screen not working on MKV, AVI, WebM and TS videos \u2022 Fixed: pinch gesture often swallowed by the volume/brightness swipe \u2022 Fixed: next/previous episode not switching the video for MKV files (and when switching between MKV and MP4) \u2022 Fixed: stream server could send empty data after a restart, causing endless buffering \u2022 Fixed: stream server staying dead after the app was in the background \u2022 Fixed: \"Clear Video Cache\" leaving Telegram's file database out of sync and breaking playback \u2022 Fixed: wrong or missing thumbnails in History/Recents after a restart \u2022 \"Max cached videos\" and \"Download whole video first\" settings now actually work \u2022 Old history entries are automatically repaired and keep their watch progress",
       "downloadURL": "https://github.com/NB6RULES/TeleStream/releases/latest/download/TeleStream.ipa",
       "iconURL": "https://raw.githubusercontent.com/NB6RULES/TeleStream/main/TeleStream/Sources/Assets.xcassets/TeleStreamLogo.imageset/logo.png",
       "localizedDescription": "TeleStream is a fast and native iOS streaming player powered by TDLibKit to stream and play media from your Telegram chats, channels, and cloud storage.",
       "tintColor": "#0088CC",
-      "size": 51247620,
+      "size": 52673794,
       "versions": [
+        {
+          "version": "1.60",
+          "date": "2026-11-07T06:56:08Z",
+          "size": 52673794,
+          "downloadURL": "https://github.com/NB6RULES/TeleStream/releases/download/v1.60/TeleStream.ipa",
+          "localizedDescription": "v1.60: Fixed: videos from History/Recents not playing after the app was force-closed (no more clearing history to make playback work) \u2022 Fixed: pinch-to-zoom / fill-screen not working on MKV, AVI, WebM and TS videos \u2022 Fixed: pinch gesture often swallowed by the volume/brightness swipe \u2022 Fixed: next/previous episode not switching the video for MKV files (and when switching between MKV and MP4) \u2022 Fixed: stream server could send empty data after a restart, causing endless buffering \u2022 Fixed: stream server staying dead after the app was in the background \u2022 Fixed: \"Clear Video Cache\" leaving Telegram's file database out of sync and breaking playback \u2022 Fixed: wrong or missing thumbnails in History/Recents after a restart \u2022 \"Max cached videos\" and \"Download whole video first\" settings now actually work \u2022 Old history entries are automatically repaired and keep their watch progress"
+        },
         {
           "version": "1.59",
           "date": "2026-08-31T17:10:59Z",
@@ -81,13 +88,6 @@
           "size": 51242262,
           "downloadURL": "https://github.com/NB6RULES/TeleStream/releases/download/v1.50/TeleStream.ipa",
           "localizedDescription": "TeleStream v1.50 automated build."
-        },
-        {
-          "version": "1.49",
-          "date": "2026-08-30T16:20:35Z",
-          "size": 51233794,
-          "downloadURL": "https://github.com/NB6RULES/TeleStream/releases/download/v1.49/TeleStream.ipa",
-          "localizedDescription": "TeleStream v1.49 automated build."
         }
       ],
       "appPermissions": {
